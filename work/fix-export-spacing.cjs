@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm');
+const root='C:/Users/Zwe Lin Naing/Documents/Codex/2026-09-09/build-x20/outputs/together/';
+let source=fs.readFileSync(root+'booth-flow.js','utf8');
+const match=source.match(/  const cardDesigns=(\{[^\n]+\});/);if(!match)throw Error('Design definitions missing');
+const designs=JSON.parse(match[1]);delete designs['clapper-filmstrip'];
+source=source.replace(match[0],'  const cardDesigns='+JSON.stringify(designs)+';');
+const old="const canvas=document.createElement('canvas');canvas.width=600;canvas.height=1800;const ctx=canvas.getContext('2d');\n    const [cx,cy,cw,ch]=d.crop,scale=Math.min(600/cw,1800/ch),ox=(600-cw*scale)/2,oy=(1800-ch*scale)/2;\n    ctx.fillStyle='#fff';ctx.fillRect(0,0,600,1800);ctx.drawImage(art,cx,cy,cw,ch,ox,oy,cw*scale,ch*scale);";
+const replacement="const [cx,cy,cw,ch]=d.crop,scale=600/cw,ox=0,oy=0;\n    const canvas=document.createElement('canvas');canvas.width=600;canvas.height=Math.round(ch*scale);const ctx=canvas.getContext('2d');\n    ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(art,cx,cy,cw,ch,0,0,canvas.width,canvas.height);";
+source=source.replace(/\r\n/g,'\n');if(!source.includes(old))throw Error('Renderer did not match');source=source.replace(old,replacement);
+source=source.replace('function editorScreen(){const l=layouts[state.layout];','function editorScreen(){const l=layouts[state.layout],outputWidth=state.template?600:l.width,outputHeight=state.template?Math.round(600*cardDesigns[state.template].crop[3]/cardDesigns[state.template].crop[2]):l.height;');
+source=source.replace('${l.width} × ${l.height} pixels. Print at ${l.width/300} × ${l.height/300} inches with 100% scaling.','${outputWidth} × ${outputHeight} pixels. ${state.template?"Sized to your artwork without added margins.":"Print at "+l.width/300+" × "+l.height/300+" inches with 100% scaling."}');
+source=source.replace('img.style.width=`${l.width/300}in`;img.style.height=`${l.height/300}in`;','img.style.width=`${canvas.width/300}in`;img.style.height=`${canvas.height/300}in`;');
+new vm.Script(source);fs.mkdirSync('work/export-spacing',{recursive:true});fs.writeFileSync('work/export-spacing/booth-flow.js',source);
+fs.writeFileSync('work/export-spacing/designs.json',JSON.stringify(designs));console.log('Prepared nine designs with artwork-sized exports and matching print dimensions.');
