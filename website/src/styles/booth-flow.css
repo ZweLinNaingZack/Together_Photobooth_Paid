@@ -76,3 +76,27 @@ body h1 em,body h2 em{font-weight:500}
 .camera-connection-error p{margin:0 0 12px}
 .connection-details{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-size:14px;line-height:1.6}.connection-details summary{cursor:pointer}.connection-details p{margin-top:12px;color:var(--muted)}.connection-details pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.7 var(--sans);margin:12px 0 0}
 @media(max-width:600px){.session-bar{align-items:flex-start;gap:12px;flex-direction:column}.session-tools{width:100%;justify-content:space-between}.camera-placeholder{padding:12px}.camera-placeholder>span{font-size:24px;margin-bottom:8px}.camera-placeholder p{display:none}.camera-placeholder strong{font-size:14px}.camera-name{left:6px;bottom:6px;padding:5px 8px}.duo-live-view{aspect-ratio:3/2}}
+.session-surface .capture-stop { min-height: 48px; }
+/* Keep the live view and shutter together on phones, including short screens. */
+@media (max-width: 800px) {
+  .session-surface { display: flex; flex-direction: column; gap: 12px; }
+  .session-surface > * { order: 6; min-width: 0; }
+  .session-surface .session-view {
+    order: 0; align-self: center; flex: none;
+    width: min(100%, 72svh); height: auto; max-height: none;
+    aspect-ratio: 3 / 2;
+  }
+  .session-surface .session-buttons { display: contents; }
+  .session-buttons > button { order: 8; width: 100%; min-height: 48px; }
+  .session-buttons > #capture-session { order: 1; margin: 0; min-height: 52px; }
+  .session-buttons > .capture-stop { order: 2; }
+  .session-surface .session-bar { order: 3; margin: 0; flex-wrap: wrap; gap: 8px; }
+  .session-surface .session-tools { flex: 1; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+  .session-surface .capture-settings { order: 4; margin: 0; padding: 12px 0; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+  .session-surface .capture-settings legend { margin-bottom: 8px; }
+  .session-surface .timer-setting { width: auto; flex: 1 1 110px; }
+  .session-surface .flash-settings { order: 5; margin: 0; padding: 12px 0; }
+  .session-surface .flash-setting-heading p { display: none; }
+  .session-surface .session-note, .session-surface #session-status { margin: 0; }
+  .session-surface .photo-review { order: 7; }
+}

@@ -2,7 +2,7 @@ import { loadEnv } from 'vite';
 import { createRoomService, roomMiddleware } from './server/rooms.mjs';
 import { createTurnProvider } from './server/turn.mjs';
 // Local rooms run alongside Vite. Static-only hosting does not provide this API.
-const allowedHosts = ['year-moves-container-advances.trycloudflare.com'];
+const allowedHosts = ['economic-occupied-image-organize.trycloudflare.com'];
 export default ({ mode }) => {
   // Server-only credentials: never prefix these with VITE_ or expose them via define.
   const env = loadEnv(mode, process.cwd(), 'TURN_');

@@ -1,3 +1,4 @@
+import { DecorativeIcon } from './components/DecorativeIcon';
 import { useEffect, useRef, useState } from 'react';
 import { Home } from './pages/Home';
 import { About } from './pages/About';
@@ -34,7 +35,7 @@ export function App() {
   }, [hash, isBooth, isAbout]);
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
-    <header className="header"><a className="wordmark" href="#" aria-label="Together home">together<span className="brand-dot">✳</span></a><nav aria-label="Main navigation"><a href="#how-it-works" className="home-nav" hidden={isBooth}>How it works</a><a href="#about" className="about-nav" aria-current={isAbout ? 'page' : undefined}>About</a></nav></header>
+    <header className="header"><a className="wordmark" href="#" aria-label="Together home">together<span className="brand-dot"><DecorativeIcon /></span></a><nav aria-label="Main navigation"><a href="#how-it-works" className="home-nav" hidden={isBooth}>How it works</a><a href="#about" className="about-nav" aria-current={isAbout ? 'page' : undefined}>About</a></nav></header>
     <main id="main">
       {!isBooth && !isAbout && <Home />}
       {isAbout && <About />}
