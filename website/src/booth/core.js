@@ -12,13 +12,13 @@
     E:layout('E',1200,1800,[rect(.035,.025,.93,.395),rect(.035,.43,.93,.395)],'Two, side by side in time',rect(.05,.85,.90,.13)),
     F:layout('F',1800,1200,[rect(.025,.035,.95,.78)],'The wide one',rect(.04,.84,.92,.13)),
     G:layout('G',1800,1200,[rect(.025,.18,.47,.46),rect(.505,.18,.47,.46)],'A pair of moments',rect(.05,.70,.9,.25)),
-    H:layout('H',1800,1200,[rect(.025,.035,.47,.53),rect(.025,.58,.31,.385),rect(.345,.58,.31,.385),rect(.665,.58,.31,.385)],'One above, three below',rect(.53,.07,.42,.45)),
     I:layout('I',1800,1200,[rect(.025,.035,.47,.455),rect(.025,.505,.47,.46),rect(.505,.505,.47,.46)],'The little L',rect(.54,.07,.40,.38)),
     J:layout('J',1800,1200,[rect(.025,.035,.47,.455),rect(.505,.035,.47,.455),rect(.025,.505,.47,.46)],'Three, with a little space',rect(.54,.55,.40,.36)),
+    N:layout('N',1200,1800,[rect(71/1696,590/2528,1553/1696,1007/2528),rect(558/1696,1813/2528,595/1696,435/2528)],'A headline and a little moment',rect(.04,.025,.92,.18)),
     K:layout('K',1800,1200,[rect(.025,.035,.47,.455),rect(.025,.505,.47,.46)],'Two with room for words',rect(.54,.13,.40,.72))
   };
-  // Keep stored IDs stable while showing consecutive names for the eight available layouts.
-  layouts.G.name = 'Layout F'; layouts.H.name = 'Layout G'; layouts.K.name = 'Layout H';
+  // Keep stored IDs stable; the retired public Layout G is no longer available.
+  layouts.G.name = 'Layout F'; layouts.K.name = 'Layout H'; layouts.N.name = 'Newspaper';
   const filters={original:'Original',vivid:'Vivid',vintage:'Vintage with Grain',cool:'Cool',yellow:'Yellow',bw:'B&W',sepia:'Sepia',noir:'Noir',glow:'Soft Glow',pink:'Dreamy Pink',fade:'Film Fade',flashpop:'Flash Pop'};
   function move(shots,from,to){const result=[...shots];if(from<0||to<0||from>=result.length||to>=result.length)return result;result.splice(to,0,result.splice(from,1)[0]);return result}
   function captureTargets(shots,count,retake=null,manual=false){if(retake!==null)return retake>=0&&retake<count?[retake]:[];const missing=Array.from({length:count},(_,i)=>i).filter(i=>!shots[i]);return manual?missing.slice(0,1):missing}

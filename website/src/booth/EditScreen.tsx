@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { layouts, filters } from './core';
 import { cardDesigns, colors } from './designs';
-import { renderCard } from './renderCard';
+import { renderCard, cardDimensions } from './renderCard';
 import { PhotoTray } from './PhotoTray';
 import { Heading } from './shared';
 import type { CardState } from './types';
@@ -21,8 +21,7 @@ export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign,
   const [exporting, setExporting] = useState(false);
   const exportLock = useRef(false), alive = useRef(true);
   const layout = layouts[card.layout];
-  const width = card.template ? 600 : layout.width;
-  const height = card.template ? Math.round(600 * cardDesigns[card.template].crop[3] / cardDesigns[card.template].crop[2]) : layout.height;
+  const { width, height } = cardDimensions(card);
   useEffect(() => {
     alive.current = true;
     const leave = () => { alive.current = false; };
@@ -50,7 +49,7 @@ export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign,
       if (print) {
         const sheet = document.getElementById('print-sheet')!;
         const image = new Image(); image.alt = 'Your finished Together photocard'; image.src = canvas.toDataURL('image/png');
-        image.style.width = `${canvas.width / 300}in`; image.style.height = `${canvas.height / 300}in`;
+        image.style.width = `${layout.width / 300}in`; image.style.height = `${layout.width / 300 * canvas.height / canvas.width}in`;
         await image.decode();
         if (!alive.current) return;
         sheet.replaceChildren(image); window.print();

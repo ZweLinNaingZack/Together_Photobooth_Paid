@@ -2,11 +2,17 @@ import { layouts,filterPixels } from './core.js';
 import { cardDesigns,colors } from './designs.ts';
   const loadImage=src=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=src});
   function cover(ctx,img,x,y,w,h){const iw=img.videoWidth||img.naturalWidth,ih=img.videoHeight||img.naturalHeight;const scale=Math.max(w/iw,h/ih);ctx.drawImage(img,(iw-w/scale)/2,(ih-h/scale)/2,w/scale,h/scale,x,y,w,h)}
+  export function cardDimensions(state) {
+    const l = layouts[state.layout], d = state.template && cardDesigns[state.template];
+    if (!d) return { width: l.width, height: l.height };
+    const width = state.preview ? 600 : Math.max(l.width, Math.round(d.crop[2]));
+    return { width, height: Math.round(d.crop[3] / d.crop[2] * width) };
+  }
   async function renderDesignedCard(state){
     const snapshot={...state,shots:[...state.shots]},d=cardDesigns[snapshot.template];if(!d || (d.layout||'A')!==snapshot.layout || snapshot.shots.length!==d.slots.length)throw Error('Choose the matching layout and fill every photo slot');
     const [art,...images]=await Promise.all([loadImage(d.src),...snapshot.shots.map(shot => shot ? loadImage(shot) : snapshot.preview ? Promise.resolve(null) : Promise.reject(Error("Missing photo")))]);
-    const [cx,cy,cw,ch]=d.crop,scale=600/cw,ox=0,oy=0;
-    const canvas=document.createElement('canvas');canvas.width=600;canvas.height=Math.round(ch*scale);const ctx=canvas.getContext('2d');
+    const [cx,cy,cw,ch]=d.crop,scale=cardDimensions(snapshot).width/cw,ox=0,oy=0;
+    const canvas=document.createElement('canvas');canvas.width=cardDimensions(snapshot).width;canvas.height=cardDimensions(snapshot).height;const ctx=canvas.getContext('2d');
     ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(art,cx,cy,cw,ch,0,0,canvas.width,canvas.height);
     images.forEach((img,i)=>{if(!img)return;const r=d.slots[i],w=Math.round(r.w*scale),h=Math.round(r.h*scale),photo=document.createElement('canvas');photo.width=w;photo.height=h;const pc=photo.getContext('2d',{willReadFrequently:true});cover(pc,img,0,0,w,h);
       if(snapshot.filter!=='original'){const pixels=pc.getImageData(0,0,w,h);filterPixels(pixels.data,snapshot.filter,17+i);pc.putImageData(pixels,0,0)}

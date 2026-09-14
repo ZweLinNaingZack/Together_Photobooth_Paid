@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { layouts, filters, move, replaceShot, captureTargets, filterPixels } from '../src/booth/core.js';
 import { captureSequence } from '../src/booth/capture.js';
 import { cardDesigns } from '../src/booth/designs.ts';
-import { renderCard } from '../src/booth/renderCard.js';
+import { renderCard, cardDimensions } from '../src/booth/renderCard.js';
 
 test('layout slots, capture counts and captions stay within their cards', () => {
   const separated = (a, b) => a.x + a.w <= b.x + 1e-9 || b.x + b.w <= a.x + 1e-9 || a.y + a.h <= b.y + 1e-9 || b.y + b.h <= a.y + 1e-9;
@@ -77,11 +77,12 @@ test('all custom exports fill the canvas and draw the correct photo count', asyn
     canvases.push(canvas); return canvas;
   } };
   try {
-    assert.equal(Object.keys(cardDesigns).length, 79);
+    assert.equal(Object.keys(cardDesigns).length, 70);
     assert(!cardDesigns['clapper-filmstrip']);
     for (const [template, design] of Object.entries(cardDesigns)) {
       const canvas = await renderCard({ layout: design.layout || 'A', template, shots: design.slots.map((_, i) => `photo${i}`), filter: 'original' });
-      assert.equal(canvas.width, 600); assert.equal(canvas.height, Math.round(600 * design.crop[3] / design.crop[2]));
+      const expectedWidth = Math.max(layouts[design.layout || 'A'].width, Math.round(design.crop[2]));
+      assert.equal(canvas.width, expectedWidth); assert.equal(canvas.height, Math.round(expectedWidth * design.crop[3] / design.crop[2]));
       assert.deepEqual(canvas.calls[0].slice(1), [...design.crop, 0, 0, canvas.width, canvas.height]);
       assert.equal(canvas.calls.length, design.slots.length + 1, `${template} must draw artwork and three photos`);
       for (const call of canvas.calls.slice(1)) {

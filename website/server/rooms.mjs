@@ -3,7 +3,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { createTurnProvider } from './turn.mjs';
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const token = () => randomBytes(24).toString('hex');
-const layouts = new Set(['A','B','C','D','E','G','H','K']);
+const layouts = new Set(['A','B','C','D','E','G','K','N']);
 const templates = new Set(['breaking-news','catch-yours','endless-moments','film-negative','movie-time','nutrition-label','red-music-player','story-today','ticket-memories']);
 function fail(message, status = 400) { return Object.assign(new Error(message), { status }); }
 export function createRoomService({ now = Date.now, rtcConfig = createTurnProvider() } = {}) {
