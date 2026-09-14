@@ -5,7 +5,7 @@ import { PhotoTray } from './PhotoTray';
 import { importPhoto, validatePhotoSelection } from './importPhotos';
 import type { CardState } from './types';
 
-export function UploadScreen({ card, onPhotos, onMove, onBack, onNext, replacement }: { card: CardState; onPhotos: (photos: string[]) => void; onMove: (from: number, to: number) => void; onBack: () => void; onNext: () => void; replacement: number | null }) {
+export function UploadScreen({ card, onPhotos, onMove, onBack, onNext, replacement, nextLabel = 'Review your photocard' }: { card: CardState; onPhotos: (photos: string[]) => void; onMove: (from: number, to: number) => void; onBack: () => void; onNext: () => void; replacement: number | null; nextLabel?: string }) {
   const count = layouts[card.layout].count, ready = card.shots.filter(Boolean).length;
   const [busy, setBusy] = useState(false), [message, setMessage] = useState('');
   const [target, setTarget] = useState<number | null>(replacement);
@@ -37,7 +37,7 @@ export function UploadScreen({ card, onPhotos, onMove, onBack, onNext, replaceme
         {target !== null && <button className="text-button" disabled={busy} onClick={() => setTarget(null)}>Cancel replacement</button>}
       </div><p role="status" className="session-note">{message}</p>
       <PhotoTray shots={card.shots} count={count} retake={target} disabled={busy} onMove={onMove} onRetake={setTarget} actionLabel="Replace" />
-      <div className="step-actions"><button className="text-button" disabled={busy} onClick={onBack}>Change design</button><button className="primary" disabled={busy || ready !== count || target !== null} onClick={onNext}>Review your photocard</button></div>
+      <div className="step-actions"><button className="text-button" disabled={busy} onClick={onBack}>Change design</button><button className="primary" disabled={busy || ready !== count || target !== null} onClick={onNext}>{nextLabel}</button></div>
     </div>
   </>;
 }

@@ -10,7 +10,7 @@ export function waitForCapture(ms, signal) {
 }
 
 // The controller knows photo timing; React owns the pictures and visible controls.
-export async function captureSequence({ shots, count, retake, method, seconds, signal, takeShot, onShot, onCountdown, onTaking, flash = false, onFlash = (_active) => {}, wait = waitForCapture }) {
+export async function captureSequence({ shots, count, retake, method, seconds, signal, takeShot, onShot, onCountdown, onTaking, flash = false, onFlash = (_active) => {}, onShutter = () => {}, wait = waitForCapture }) {
   const targets = captureTargets(shots, count, retake, method === 'manual');
   for (const [position, target] of targets.entries()) {
     signal.throwIfAborted();
@@ -30,6 +30,8 @@ export async function captureSequence({ shots, count, retake, method, seconds, s
         signal.throwIfAborted();
       }
       photo = await takeShot();
+      signal.throwIfAborted();
+      onShutter();
     } finally {
       if (flash) onFlash(false);
     }

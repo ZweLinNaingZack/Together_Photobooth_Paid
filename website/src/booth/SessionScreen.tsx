@@ -1,3 +1,4 @@
+import { CameraCardPreview } from './CameraCardPreview';
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { layouts } from './core';
@@ -35,6 +36,7 @@ export function SessionScreen(props: Props) {
   const capture = useRef<AbortController | null>(null);
   const alive = useRef(true);
   const view = useRef<HTMLDivElement>(null);
+  const [shutter, setShutter] = useState(0);
   const [flashLit, setFlashLit] = useState(false);
   const [remoteMirror, setRemoteMirror] = useState(true), [remoteBusy, setRemoteBusy] = useState(false);
   const [otherPaused, setOtherPaused] = useState(false);
@@ -48,6 +50,7 @@ export function SessionScreen(props: Props) {
     if (event.type === 'photos' && Array.isArray(event.shots) && event.shots.length <= layout.count && event.shots.every(shot => typeof shot === 'string' && (!shot || shot.startsWith('data:image/jpeg;base64,')))) props.onSharedPhotos?.(event.shots);
     if (event.type === 'busy' && typeof event.value === 'boolean') { setRemoteBusy(event.value); if (!event.value) { setCountdown(null); setFlashLit(false); } }
     if (event.type === 'countdown' && (event.value === null || typeof event.value === 'number' || event.value === '♡')) setCountdown(event.value as number | string | null);
+    if (event.type === 'shutter') setShutter(value => value + 1);
     if (event.type === 'flash' && typeof event.value === 'boolean') setFlashLit(event.value);
     if (event.type === 'flashColor' && typeof event.value === 'string' && event.value in flashColors) props.onFlashColor(event.value as FlashColor);
     if (event.type === 'shot' && Number.isInteger(event.index) && Number(event.index) >= 0 && Number(event.index) < layout.count && typeof event.shot === 'string' && event.shot.startsWith('data:image/jpeg;base64,')) { props.onShot(Number(event.index), event.shot); props.onRetake(null); }
@@ -136,7 +139,7 @@ export function SessionScreen(props: Props) {
     try {
       if (duo) { await peer.send({ type: 'busy', value: true }); await peer.send({ type: 'flashColor', value: props.flashColor }); }
       await captureSequence({ shots: card.shots, count: layout.count, retake, method, seconds, signal: controller.signal, takeShot,
-        flash: props.flash, onFlash: (lit: boolean) => { if (alive.current && capture.current === controller) { setFlashLit(lit); share({ type: 'flash', value: lit }); } },
+        onShutter: () => { setShutter(value => value + 1); share({ type: 'shutter' }); }, flash: props.flash, onFlash: (lit: boolean) => { if (alive.current && capture.current === controller) { setFlashLit(lit); share({ type: 'flash', value: lit }); } },
         onShot: async (index: number, shot: string) => { if (duo) await peer.send({ type: 'shot', index, shot }); if (!controller.signal.aborted && alive.current) props.onShot(index, shot); }, onCountdown: (value: number | string | null) => { setCountdown(value); share({ type: 'countdown', value }); }, onTaking: (index: number) => setStatus(`Taking photo ${index + 1} of ${layout.count}`) });
       if (!controller.signal.aborted && alive.current) { props.onRetake(null); setStatus('Photo saved. Reorder, retake, or continue when you’re ready.'); }
     } catch (error) {
@@ -152,6 +155,7 @@ export function SessionScreen(props: Props) {
       <div className={`session-view ${duo ? 'duo-live-view' : 'solo-live-view'}`} ref={view}>
         <div className="camera-pane" style={{ order: guest ? 1 : 0 }}><video ref={video} id="live-camera" aria-label="Your live camera" className={props.mirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setVideoReady(true)} onEmptied={() => setVideoReady(false)} hidden={!stream} />{(!stream || !videoReady) && <div className="camera-placeholder"><span aria-hidden="true">◎</span><strong>{pending ? 'Opening your camera…' : 'Your camera is off'}</strong><p>{pending ? 'Allow camera access to join the moment.' : 'Turn your camera on to take your photos.'}</p></div>}<span className="camera-name">You</span></div>
         {duo && <div className="camera-pane" style={{ order: guest ? 0 : 1 }}><video ref={remoteVideo} aria-label="Your person’s live camera" className={remoteMirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setRemoteReady(true)} onEmptied={() => setRemoteReady(false)} hidden={!peer.remote} />{(!peer.remote || !peer.connected || !remoteReady) && <div className="camera-placeholder"><span aria-hidden="true">♡</span><strong>Waiting for your person…</strong><p>Both of you need to enter this page and allow camera access.</p></div>}<span className="camera-name">Your person</span></div>}
+        {shutter > 0 && <div key={shutter} className="shutter-flash" aria-hidden="true" />}
         <div id="shot-countdown" hidden={countdown === null} aria-live="assertive">{countdown}</div>
       </div>
       <ScreenFlash active={flashLit} color={props.flashColor} view={view} />
@@ -167,6 +171,7 @@ export function SessionScreen(props: Props) {
       </div>
       <p id="session-status" aria-live="polite">{guest ? remoteBusy ? 'Your creator is taking your shared photos…' : complete ? 'Your photos are ready. Your creator can take you both to export.' : 'Ready when your creator is.' : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
 <div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{guest ? 'Leave session' : 'Change design'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? `Retake photo ${retake + 1}` : method === 'manual' ? 'Take a photo' : ready ? 'Continue countdown' : 'Start the countdown'} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>Stop countdown</button><button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null || (duo && !peer.connected)} onClick={async () => { try { if (duo) await peer.send({ type: 'edit' }); props.onNext(!!stream); } catch (e) { setMessage(e instanceof Error ? e.message : 'Please reconnect.'); } }}>Make it yours</button></div>
+      {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={takeShot} retake={retake} />}
       <PhotoTray shots={card.shots} count={layout.count} retake={retake} disabled={locked || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
     </div>
   </>;

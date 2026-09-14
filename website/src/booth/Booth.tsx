@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { LeaveDialog } from '../components/LeaveDialog';
-import { move, replaceShot } from './core';
+import { layouts, move, replaceShot } from './core';
 import { Instructions } from '../components/Instructions';
 import { LayoutScreen } from './LayoutScreen';
 import { DesignScreen } from './DesignScreen';
 import { SessionScreen } from './SessionScreen';
 import { SourceScreen } from './SourceScreen';
+import { DuoUploadScreen } from './DuoUploadScreen';
 import { UploadScreen } from './UploadScreen';
 import { EditScreen } from './EditScreen';
 import { ModeScreen } from './ModeScreen';
@@ -38,10 +39,12 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const [flashColor, setFlashColor] = useState<FlashColor>('white');
   const [mirror, setMirror] = useState(true);
   const screen = useRef<HTMLDivElement>(null);
-  const hasPhotos = card.shots.some(Boolean);
+  const [duoUploads, setDuoUploads] = useState<string[]>([]);
+  const hasPhotos = card.shots.some(Boolean) || duoUploads.some(Boolean);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
   function clearPhotos() {
     setCard(current => ({ ...current, shots: [] }));
+    setDuoUploads([]);
     setRetake(null); setRestoreCamera(false);
     document.getElementById('print-sheet')?.replaceChildren();
   }
@@ -73,6 +76,10 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   useEffect(() => { if (active && !instructions) { screen.current?.querySelector('h1')?.focus({ preventScroll: true }); window.scrollTo(0, 0); } }, [step, active, instructions]);
   const change = (patch: Partial<CardState>) => setCard(current => ({ ...current, ...patch }));
   const reorder = (from: number, to: number) => {
+    if (mode === 'duo' && source === 'upload') {
+      const count = layouts[card.layout].count;
+      setDuoUploads(current => [...move(current.slice(0, count), from, to), ...move(current.slice(count), from, to)]);
+    }
     const apply = () => { setCard(current => ({ ...current, shots: move(current.shots, from, to) })); setRetake(null); };
     if (party.room?.role === 'host' && source === 'camera') {
       void duoControl.current?.({ type: 'move', from, to }).then(apply).catch(() => setSharedError('Reconnect your cameras before changing the shared photo order.'));
@@ -110,15 +117,16 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         {active && step === 'room' && party.room && <WaitingRoom room={party.room} busy={party.busy} error={party.error} onReady={value => { void party.ready(value); }} onContinue={enterParty} onLeave={() => requestLeave(() => { party.end(); setStep('duo'); })} />}
         {active && step === 'layout' && <LayoutScreen selected={card.layout} onSelect={layout => { if (layout !== card.layout) change({ layout, shots: [], template: null }); setRetake(null); }} onBack={() => setStep(mode === 'duo' ? 'duo' : 'mode')} onNext={() => setStep('source')} />}
         {active && step === 'source' && <SourceScreen mode={mode} onBack={() => setStep('layout')} onChoose={choice => { if (choice !== source) change({ shots: [] }); setSource(choice); setRetake(null); setStep('design'); }} />}
-        {active && step === 'design' && <><DesignScreen busy={party.busy} card={card} onSelect={template => change({ template })} onBack={() => { party.end(); setStep('source'); }} nextLabel={party.busy ? 'Creating your booth…' : mode === 'duo' ? 'Create invitation' : source === 'upload' ? 'Choose your photos' : 'Take the photos now'} onNext={() => { setRestoreCamera(false); if (mode === 'duo') void createParty(); else setStep(source === 'upload' ? 'upload' : 'session'); }} /><p className="room-error" role="alert">{party.error}</p></>}
+        {active && step === 'design' && <><DesignScreen busy={party.busy} card={card} onSelect={template => change({ template })} onBack={() => { party.end(); setStep('source'); }} nextLabel={party.busy ? 'Creating your booth…' : mode === 'duo' && source === 'camera' ? 'Create invitation' : source === 'upload' ? 'Choose your photos' : 'Take the photos now'} onNext={() => { setRestoreCamera(false); if (mode === 'duo' && source === 'camera') void createParty(); else setStep(source === 'upload' ? 'upload' : 'session'); }} /><p className="room-error" role="alert">{party.error}</p></>}
         {active && (step === 'session' || step === 'edit' && party.room && source === 'camera') && <div hidden={step !== 'session'}><SessionScreen room={party.room} visible={step === 'session'} duoControl={duoControl} onSharedPhotos={shots => change({ shots })} onRemoteSession={index => { setRetake(index); setStep('session'); }} card={card} method={method} seconds={seconds} onMethod={setMethod} onSeconds={setSeconds} retake={retake} onRetake={setRetake} restoreCamera={restoreCamera} interrupted={instructions || !!pendingLeave} flash={flash} flashColor={flashColor} onFlashChange={setFlash} onFlashColor={setFlashColor} mirror={mirror} onMirrorChange={setMirror}
           onShot={(index, shot) => setCard(current => ({ ...current, shots: replaceShot(current.shots, index, shot) }))} onMove={reorder} onBack={() => goBack('design')} onNext={wasCamera => { setRestoreCamera(wasCamera); setRetake(null); setStep('edit'); }} /></div>}
-        {active && step === 'upload' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('design')} onNext={() => setStep('edit')} />}
+        {active && step === 'upload' && mode === 'solo' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('design')} onNext={() => setStep('edit')} />}
+        {active && step === 'upload' && mode === 'duo' && <DuoUploadScreen card={card} photos={duoUploads} onPhotos={setDuoUploads} onBack={() => goBack('design')} onNext={shots => { change({ shots }); setRetake(null); setStep('edit'); }} />}
         {active && step === 'edit' && <><EditScreen photosLocked={party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => goBack(source === 'upload' ? 'upload' : 'session')} onDesign={() => goBack('design')} /><p className="room-error" role="alert">{sharedError}</p></>}
       </div>
     </section>
     <Instructions open={active && instructions} onDismiss={() => { setInstructions(false); if (step === 'layout') window.location.hash = ''; }} onContinue={() => setInstructions(false)} />
     <div id="print-sheet" aria-hidden="true" />
-    <LeaveDialog open={!!pendingLeave} count={card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); clearPhotos(); proceed?.(); }} />
+    <LeaveDialog open={!!pendingLeave} count={duoUploads.some(Boolean) ? duoUploads.filter(Boolean).length : card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); clearPhotos(); proceed?.(); }} />
   </>;
 }

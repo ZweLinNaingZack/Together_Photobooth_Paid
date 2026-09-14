@@ -100,3 +100,16 @@ body h1 em,body h2 em{font-weight:500}
   .session-surface .session-note, .session-surface #session-status { margin: 0; }
   .session-surface .photo-review { order: 7; }
 }
+.session-view { isolation: isolate; }
+.session-view #shot-countdown { z-index: 5; pointer-events: none; }
+.shutter-flash { position: absolute; inset: 0; z-index: 6; background: white; pointer-events: none; animation: shutter-fade 260ms ease-out forwards; }
+@keyframes shutter-fade { from { opacity: .9; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .shutter-flash { animation-duration: 100ms; } }
+.duo-upload-dialog { width: min(850px, 94vw); max-height: 90svh; overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); color: var(--ink); }
+.duo-upload-dialog::backdrop { background: #24292499; }
+.duo-upload-preview { display: block; max-width: 100%; max-height: 65svh; width: auto; margin: 0 auto 24px; }
+.duo-side-label { text-align: center; font-weight: 600; color: var(--red); }
+.camera-card-preview { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.camera-card-preview summary { cursor: pointer; }
+.camera-card-preview img { display: block; max-height: 420px; max-width: 100%; margin: 16px auto; }
+.camera-card-preview p { font-size: 14px; color: var(--muted); }

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
+ <title id="title">Catch Yours photocard — layout H</title>
+ <desc id="desc">Editable romantic photocard template with blank photo slots and ticket footer.</desc>
+ <defs>
+  <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8f4e7"/><stop offset="1" stop-color="#ece6d8"/></linearGradient>
+  <linearGradient id="photoBlank"><stop stop-color="#fffdf4"/><stop offset=".52" stop-color="#f5efde"/><stop offset="1" stop-color="#fffaf0"/></linearGradient>
+  <linearGradient id="ticket" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffd0d8"/><stop offset="1" stop-color="#f2b3c0"/></linearGradient>
+  <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="3" dy="6" stdDeviation="5" flood-color="#5c352f" flood-opacity=".28"/></filter>
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".04" numOctaves="3" seed="8"/><feColorMatrix type="saturate" values="0"/><feBlend in="SourceGraphic" mode="multiply"/></filter>
+ </defs>
+ <rect width="1800" height="1200" fill="#aa3b40"/>
+ <rect x="34" y="34" width="1732" height="1132" fill="url(#paper)" opacity=".98"/>
+ <rect x="34" y="34" width="1732" height="1132" fill="#f6f0e3" opacity=".10" filter="url(#grain)"/>
+ <text x="260" y="120" text-anchor="start" font-family="'Segoe Script','Brush Script MT',cursive" font-size="92" font-weight="700" fill="#a92f39">Catch</text>
+ <text x="260" y="205" text-anchor="start" font-family="'Segoe Script','Brush Script MT',cursive" font-size="92" font-weight="700" fill="#a92f39">Yours</text>
+ <path d="M0 13.75 C-30.250000000000004 -9.9,-28.6 35.75,0 55 C28.6 35.75,30.250000000000004 -9.9,0 13.75Z" transform="translate(1680 70) rotate(15)" fill="#b5343f" opacity=".88"/><path d="M0 12 C-26.400000000000002 -8.64,-24.96 31.200000000000003,0 48 C24.96 31.200000000000003,26.400000000000002 -8.64,0 12Z" transform="translate(55 160) rotate(-12)" fill="#b5343f" opacity=".88"/>
+ <g id="photo-slots"><g id="photo-1" data-photo-slot="1" transform="rotate(-1.1 900 417.5)">
+    <rect x="70" y="285" width="1660" height="265" fill="#fffefd" stroke="#d9d5ce" stroke-width="3" filter="url(#shadow)"/>
+    <rect x="92" y="307" width="1616" height="181.25" rx="3" fill="url(#photoBlank)" stroke="#ddd5c6" stroke-width="2"/>
+    
+  </g><g id="photo-2" data-photo-slot="2" transform="rotate(1.2 340 710)">
+    <rect x="70" y="570" width="540" height="280" fill="#fffefd" stroke="#d9d5ce" stroke-width="3" filter="url(#shadow)"/>
+    <rect x="83.5" y="583.5" width="513" height="211" rx="3" fill="url(#photoBlank)" stroke="#ddd5c6" stroke-width="2"/>
+    <text x="83.5" y="832" font-family="'Segoe Print','Comic Sans MS',cursive" font-size="29.7" fill="#181515">Chilling out</text>
+  </g><g id="photo-3" data-photo-slot="3" transform="rotate(-1.1 900 710)">
+    <rect x="630" y="570" width="540" height="280" fill="#fffefd" stroke="#d9d5ce" stroke-width="3" filter="url(#shadow)"/>
+    <rect x="643.5" y="583.5" width="513" height="211" rx="3" fill="url(#photoBlank)" stroke="#ddd5c6" stroke-width="2"/>
+    
+  </g><g id="photo-4" data-photo-slot="4" transform="rotate(1.2 1460 710)">
+    <rect x="1190" y="570" width="540" height="280" fill="#fffefd" stroke="#d9d5ce" stroke-width="3" filter="url(#shadow)"/>
+    <rect x="1203.5" y="583.5" width="513" height="211" rx="3" fill="url(#photoBlank)" stroke="#ddd5c6" stroke-width="2"/>
+    
+  </g></g>
+ <path d="M0 10.75 C-23.650000000000002 -7.739999999999999,-22.36 27.95,0 43 C22.36 27.95,23.650000000000002 -7.739999999999999,0 10.75Z" transform="translate(1655 855) rotate(15)" fill="#b5343f" opacity=".88"/><path d="M0 9 C-19.8 -6.4799999999999995,-18.72 23.400000000000002,0 36 C18.72 23.400000000000002,19.8 -6.4799999999999995,0 9Z" transform="translate(1722 1030) rotate(-8)" fill="#b5343f" opacity=".88"/>
+ 
+ <g id="ticket-footer" transform="translate(1080 925) rotate(-1)">
+  <rect width="650" height="220" rx="12" fill="url(#ticket)" stroke="#c26978" stroke-width="3" filter="url(#shadow)"/>
+  <rect x="15" y="15" width="620" height="190" rx="9" fill="none" stroke="#a95867" stroke-width="2" stroke-dasharray="12 8"/>
+  <line x1="442.00000000000006" y1="15" x2="442.00000000000006" y2="205" stroke="#a95867" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="221.00000000000003" y="77" text-anchor="middle" font-family="Georgia,serif" font-size="36" font-weight="900">PHOTO</text>
+  <text x="221.00000000000003" y="118.80000000000001" text-anchor="middle" font-family="Georgia,serif" font-size="36" font-weight="900">TICKET</text>
+  <text x="546" y="92.39999999999999" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" font-weight="700">DAY</text>
+  <text x="546" y="132" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" font-weight="700">PASS</text>
+  <text x="28" y="192" font-family="Arial,sans-serif" font-size="13">No. 001044</text>
+ </g>
+ <text x="950" y="1015" text-anchor="end" font-family="Impact,'Arial Black',sans-serif" font-size="34" fill="#181515">PHOTO</text>
+ <text x="950" y="1050" text-anchor="end" font-family="Impact,'Arial Black',sans-serif" font-size="34" fill="#181515">PLACE</text>
+</svg>

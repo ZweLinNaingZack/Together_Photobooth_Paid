@@ -1,3 +1,4 @@
+import { templateCatalog } from '../src/booth/templateCatalog.js';
 import { randomBytes, randomInt } from 'node:crypto';
 import { createTurnProvider } from './turn.mjs';
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -23,7 +24,7 @@ export function createRoomService({ now = Date.now, rtcConfig = createTurnProvid
     }
     if (action === 'create') {
       const s = body.settings;
-      if (!s || !layouts.has(s.layout) || !['camera','upload'].includes(s.source) || (s.template !== null && (s.layout !== 'A' || !templates.has(s.template)))) throw fail('Please choose a valid layout and design first.');
+      if (!s || !layouts.has(s.layout) || !['camera','upload'].includes(s.source) || (s.template !== null && !(s.layout === 'A' && templates.has(s.template) || Object.hasOwn(templateCatalog, s.template) && templateCatalog[s.template].layout === s.layout))) throw fail('Please choose a valid layout and design first.');
       if (rooms.size >= 500) throw fail('All booths are busy. Please try again shortly.', 503);
       let code; do { code = Array.from({ length: 6 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
       const room = { code, invite: token(), expires: now() + 45 * 60000, settings: { layout: s.layout, source: s.source, template: s.template }, host: { token: token(), ready: false, seen: now() }, guest: null, signals: [], signalId: 0 };

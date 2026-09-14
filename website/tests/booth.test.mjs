@@ -67,23 +67,23 @@ test('twelve filters preserve alpha and vintage grain is repeatable', () => {
   const a = original.slice(), b = original.slice(); filterPixels(a, 'vintage', 17); filterPixels(b, 'vintage', 17); assert.deepEqual(a, b);
 });
 
-test('all nine custom exports fill the canvas with artwork and draw three photos', async () => {
+test('all custom exports fill the canvas and draw the correct photo count', async () => {
   const previousDocument = globalThis.document, previousImage = globalThis.Image;
   const canvases = [];
   globalThis.Image = class { naturalWidth = 1440; naturalHeight = 960; set src(value) { this.source = value; queueMicrotask(() => this.onload()); } };
   globalThis.document = { fonts: { ready: Promise.resolve() }, createElement() {
     const calls = [], canvas = { width: 0, height: 0, calls, getContext: () => context };
-    const context = { drawImage: (...args) => calls.push(args), fillRect() {}, save() {}, restore() {}, beginPath() {}, roundRect() {}, clip() {}, moveTo() {}, lineTo() {}, closePath() {}, putImageData() {}, getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }) };
+    const context = { drawImage: (...args) => calls.push(args), fillRect() {}, save() {}, translate() {}, rotate() {}, restore() {}, beginPath() {}, roundRect() {}, clip() {}, moveTo() {}, lineTo() {}, closePath() {}, putImageData() {}, getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }) };
     canvases.push(canvas); return canvas;
   } };
   try {
-    assert.equal(Object.keys(cardDesigns).length, 9);
+    assert.equal(Object.keys(cardDesigns).length, 79);
     assert(!cardDesigns['clapper-filmstrip']);
     for (const [template, design] of Object.entries(cardDesigns)) {
-      const canvas = await renderCard({ layout: 'A', template, shots: ['photo1', 'photo2', 'photo3'], filter: 'original' });
+      const canvas = await renderCard({ layout: design.layout || 'A', template, shots: design.slots.map((_, i) => `photo${i}`), filter: 'original' });
       assert.equal(canvas.width, 600); assert.equal(canvas.height, Math.round(600 * design.crop[3] / design.crop[2]));
       assert.deepEqual(canvas.calls[0].slice(1), [...design.crop, 0, 0, canvas.width, canvas.height]);
-      assert.equal(canvas.calls.length, 4, `${template} must draw artwork and three photos`);
+      assert.equal(canvas.calls.length, design.slots.length + 1, `${template} must draw artwork and three photos`);
       for (const call of canvas.calls.slice(1)) {
         const [, x, y, w, h] = call;
         assert(x >= 0 && y >= 0 && x + w <= canvas.width + 1 && y + h <= canvas.height + 1);

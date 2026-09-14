@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Photobox newspaper template — layout J</title>
+  <desc id="desc">Editable vintage newspaper photocard template with empty photo slots.</desc>
+  <defs>
+    <filter id="paperTexture" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="4" seed="12" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="grayNoise"/>
+      <feBlend in="SourceGraphic" in2="grayNoise" mode="multiply"/>
+    </filter>
+    <linearGradient id="placeholder" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#dedede"/><stop offset=".5" stop-color="#f0f0f0"/><stop offset="1" stop-color="#d1d1d1"/>
+    </linearGradient>
+    <filter id="distress" x="-5%" y="-10%" width="110%" height="120%">
+      <feTurbulence baseFrequency=".025" numOctaves="2" seed="7" result="t"/>
+      <feDisplacementMap in="SourceGraphic" in2="t" scale="1.4"/>
+    </filter>
+  </defs>
+  <rect width="1800" height="1200" fill="#eee9df"/>
+  <rect width="1800" height="1200" fill="#f7f3ea" opacity=".35" filter="url(#paperTexture)"/>
+  <g fill="#171717" stroke="#171717">
+    <path d="M55 48H1745M55 58H1745" stroke-width="5"/>
+    <text x="900" y="140" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="92" font-weight="900" letter-spacing="-3">BREAKING NEWS</text>
+    <path d="M55 164H1745" stroke-width="5"/>
+    <text x="55" y="201" font-family="Arial Narrow, Impact, sans-serif" font-size="18" font-weight="700">VOL. 11, NO. 5</text>
+    <text x="900" y="201" text-anchor="middle" font-family="Arial Narrow, Impact, sans-serif" font-size="18" letter-spacing="1">★   REALLYCREATSITE.COM   ★</text>
+    <text x="1745" y="201" text-anchor="end" font-family="Arial Narrow, Impact, sans-serif" font-size="18" font-weight="700">10 APRIL 2026</text>
+    <path d="M55 218H1745" stroke-width="5"/>
+    <text x="900" y="348" text-anchor="middle" font-family="Impact, 'Arial Black', sans-serif" font-size="142" font-weight="900" letter-spacing="4" filter="url(#distress)">PHOTOBOX</text>
+    <text x="900" y="418" text-anchor="middle" font-family="Impact, 'Arial Black', sans-serif" font-size="68.16" font-weight="900">BY KAMERASPACE</text>
+    <path d="M55 443H1745M55 453H1745" stroke-width="5"/>
+  </g>
+  <g id="photo-slots">
+    <g id="photo-slot-1" data-photo-slot="1">
+      <rect x="70" y="465" width="820" height="190" rx="8" fill="url(#placeholder)" stroke="#c7c5c2" stroke-width="2"/>
+    </g>
+    <g id="photo-slot-2" data-photo-slot="2">
+      <rect x="910" y="465" width="820" height="190" rx="8" fill="url(#placeholder)" stroke="#c7c5c2" stroke-width="2"/>
+    </g>
+    <g id="photo-slot-3" data-photo-slot="3">
+      <rect x="70" y="675" width="820" height="210" rx="8" fill="url(#placeholder)" stroke="#c7c5c2" stroke-width="2"/>
+    </g></g>
+  
+  <g id="footer" fill="#171717" stroke="#171717">
+    <path d="M55 990H1745M55 1060H1745M55 1072H1745" stroke-width="5"/>
+    <circle cx="90" cy="1025" r="22"/><circle cx="1710" cy="1025" r="22"/>
+    <text x="90" y="1034" text-anchor="middle" font-family="Arial" font-size="25" fill="#f7f3ea" stroke="none">★</text>
+    <text x="1710" y="1034" text-anchor="middle" font-family="Arial" font-size="25" fill="#f7f3ea" stroke="none">★</text>
+    <text x="900" y="1038" text-anchor="middle" font-family="Impact, 'Arial Black', sans-serif" font-size="44" letter-spacing="7" stroke="none">NITTIE COFFEE &amp; EATERY</text>
+  </g>
+</svg>

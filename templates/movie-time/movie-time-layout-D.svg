@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1800" viewBox="0 0 1200 1800" role="img" aria-labelledby="title desc">
+ <title id="title">Movie Time ticket photocard — layout D</title>
+ <desc id="desc">Editable movie-ticket template with illustrated empty photo placeholders.</desc>
+ <defs>
+  <linearGradient id="ticket" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fdf6e8"/><stop offset="1" stop-color="#eee0c8"/></linearGradient>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#a9e2ff"/><stop offset="1" stop-color="#e7f8ff"/></linearGradient>
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".04" numOctaves="3" seed="19"/><feColorMatrix type="saturate" values="0"/><feBlend in="SourceGraphic" mode="multiply"/></filter>
+ </defs>
+ <rect width="1200" height="1800" fill="#760509"/>
+ <rect x="28" y="28" width="1144" height="1744" rx="18" fill="url(#ticket)"/>
+ <rect x="28" y="28" width="1144" height="1744" rx="18" fill="#fff" opacity=".08" filter="url(#grain)"/>
+ <path d="M45 30H1155" stroke="#760509" stroke-width="25" stroke-linecap="round" stroke-dasharray="1 28"/>
+ <path d="M45 1770H1155" stroke="#760509" stroke-width="25" stroke-linecap="round" stroke-dasharray="1 28"/>
+ <text x="600" y="105" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="86" fill="#72080c" letter-spacing="2">MOVIE</text>
+ <text x="600" y="195" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-size="86" fill="#72080c" letter-spacing="2">TIME</text>
+ <g transform="translate(42 130) scale(0.72)" fill="#242424" stroke="#0f0f0f" stroke-width="3"><circle cx="28" cy="25" r="24"/><circle cx="78" cy="25" r="27"/><circle cx="28" cy="25" r="9" fill="#555"/><circle cx="78" cy="25" r="10" fill="#555"/><rect x="25" y="50" width="66" height="34" rx="5"/><path d="M91 58l35-16v47L91 75Z"/><rect x="45" y="82" width="48" height="13" transform="rotate(-8 45 82)"/></g><g transform="translate(1105 155) scale(0.68)"><circle r="48" fill="#a9aaac" stroke="#555" stroke-width="4"/><circle r="9" fill="#333"/><ellipse rx="10" ry="21" cy="-27" transform="rotate(0)" fill="#353535"/><ellipse rx="10" ry="21" cy="-27" transform="rotate(72)" fill="#353535"/><ellipse rx="10" ry="21" cy="-27" transform="rotate(144)" fill="#353535"/><ellipse rx="10" ry="21" cy="-27" transform="rotate(216)" fill="#353535"/><ellipse rx="10" ry="21" cy="-27" transform="rotate(288)" fill="#353535"/><path d="M-35 38l-32 28h100l-18-24" fill="#e8dfcf" stroke="#4b4b4b" stroke-width="4"/></g>
+ <g id="photo-slots"><g id="photo-slot-1" data-photo-slot="1">
+  <rect x="65" y="285" width="1070" height="930" fill="url(#sky)"/>
+  <ellipse cx="279" cy="517.5" rx="90.95" ry="51.15" fill="#fff" opacity=".95"/>
+  <ellipse cx="353.90000000000003" cy="512.85" rx="74.9" ry="69.75" fill="#fff" opacity=".95"/>
+  <ellipse cx="428.8" cy="526.8" rx="85.60000000000001" ry="46.5" fill="#fff" opacity=".95"/>
+  <path d="M65 936Q257.6 750 514.4 917.4000000000001T1135 861.6V1215H65Z" fill="#b7db4d"/>
+  <path d="M65 1010.4Q279 824.4 546.5 1001.1T1135 936V1215H65Z" fill="#79a900"/>
+  <rect x="65" y="285" width="1070" height="930" fill="none" stroke="#f8f0df" stroke-width="6"/>
+ </g></g>
+ 
+ <g id="footer" fill="#111">
+  <path d="M65 1443H1135" stroke="#7c1015" stroke-width="18" stroke-linecap="round" stroke-dasharray="1 33"/>
+  <rect x="90.00" y="1485" width="40.80" height="130"/><rect x="144.40" y="1485" width="27.20" height="130"/><rect x="185.20" y="1485" width="54.40" height="130"/><rect x="266.80" y="1485" width="13.60" height="130"/><rect x="321.20" y="1485" width="27.20" height="130"/><rect x="362.00" y="1485" width="13.60" height="130"/><rect x="430.00" y="1485" width="27.20" height="130"/><rect x="498.00" y="1485" width="13.60" height="130"/><rect x="525.20" y="1485" width="40.80" height="130"/><rect x="593.20" y="1485" width="54.40" height="130"/><rect x="661.20" y="1485" width="27.20" height="130"/><rect x="715.60" y="1485" width="13.60" height="130"/><rect x="783.60" y="1485" width="40.80" height="130"/><rect x="838.00" y="1485" width="27.20" height="130"/><rect x="878.80" y="1485" width="40.80" height="130"/><rect x="946.80" y="1485" width="13.60" height="130"/><rect x="1014.80" y="1485" width="13.60" height="130"/><rect x="1055.60" y="1485" width="40.80" height="130"/>
+  <text x="600" y="1660" text-anchor="middle" font-family="Arial,sans-serif" font-size="36" letter-spacing="9">0 123456 789111</text>
+ </g>
+</svg>
