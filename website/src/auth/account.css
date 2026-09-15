@@ -1,0 +1,20 @@
+.account-page{max-width:760px;margin:0 auto;padding:64px 24px 90px;text-align:center}.account-page h1{font-size:clamp(34px,6vw,64px);line-height:1.1;margin:22px 0}.account-intro{color:var(--muted);line-height:1.7}.account-panel{max-width:440px;margin:32px auto;padding:32px;background:#e9ecdf;border:1px solid var(--line);border-radius:16px;text-align:left}.account-panel fieldset{border:0;padding:0;margin:0;min-width:0}.account-panel label{display:block;font-size:15px;margin-bottom:20px}.account-panel input{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:13px 14px;border:1px solid var(--line);border-radius:7px;background:#faf8f2;font:inherit}.account-panel .primary,.account-google{width:100%;box-sizing:border-box;text-align:center;display:block;text-decoration:none}.account-panel small{display:block;font-size:12px;color:var(--muted);line-height:1.5;margin-top:8px}.account-divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:24px 0}.account-divider:before,.account-divider:after{content:'';height:1px;background:var(--line);flex:1}.account-links{display:flex;flex-direction:column;gap:8px;margin-top:22px;align-items:center}.account-email{overflow-wrap:anywhere;margin:14px 0 28px}.account-panel>.text-button{margin-top:20px}.account-error,.account-message{font-size:14px;line-height:1.6;margin-top:20px}.account-error{color:#962b38}.account-message{color:#34553e}.account-panel button:disabled{opacity:.6;cursor:default}.header nav{flex-wrap:wrap}.header .account-nav{white-space:nowrap}@media(max-width:600px){.account-page{padding:36px 18px 60px}.account-panel{padding:24px 18px}.header{flex-wrap:wrap;gap:14px}.header nav{gap:16px;justify-content:center}}
+.wallet-panel { margin: 1.5rem 0; padding: 1.25rem 0; border-block: 1px solid #d5d8ca; text-align: left; }
+.wallet-panel h2 { font-size: 1.35rem; }
+.wallet-panel h3 { font-size: 1rem; margin-top: 1.5rem; }
+.wallet-panel .wallet-balance { font-size: 2.4rem; font-weight: 700; margin: .75rem 0; }
+.wallet-balance span { font-size: 1rem; font-weight: 400; }
+.wallet-panel ul { padding-left: 1.2rem; }
+.wallet-panel li { margin-block: .6rem; }
+.topups { margin-top: 2rem; border-top: 1px solid var(--line); }
+.topups p { line-height: 1.6; }
+.topup-notice { padding: 12px; background: #faf8f2; border-radius: 8px; font-size: .9rem; }
+.topup-checkout, .payment-review { margin-block: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.bank-qr, .receipt-view img { display: block; width: 100%; height: auto; margin-block: 16px; }
+.payment-list { list-style: none; padding: 0 !important; }
+.payment-list li { border-bottom: 1px solid var(--line); padding-block: 12px; }
+.topups small { overflow-wrap: anywhere; }
+.payment-check { display: flex !important; align-items: flex-start; gap: 10px; }
+.payment-check input { width: auto; flex: none; }
+.topups input[type=file] { padding: 10px 4px; }
+.topups .primary { margin-top: 16px; }
