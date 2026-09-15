@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { roomRequest } from './rooms';
 import type { RoomSession } from './rooms';
-import { sendSignal } from './signaling';
+import { createSignalQueue } from './signaling';
 import { connectionRetry } from './connectionRetry.mjs';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
@@ -29,7 +29,8 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     setRemote(null); setConnected(false); setError('');
     const report = (e: unknown) => { if (!stopped) setError(e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'); };
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
-    const signal = (message: Signal) => sendSignal((payload: Signal) => roomRequest('signal', { ...auth, message: payload }), { ...message, id: crypto.randomUUID() }, () => stopped);
+    const enqueueSignal = createSignalQueue((payload: Signal) => roomRequest('signal', { ...auth, message: payload }), () => stopped);
+    const signal = (message: Signal) => enqueueSignal({ ...message, id: crypto.randomUUID() });
     function closePeer() {
       channel?.close(); pc?.close(); channel = null; pc = null; incoming.clear();
       for (const waiter of acknowledgments.values()) waiter.reject(new Error('Camera connection closed.'));
@@ -169,7 +170,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       if (stopped || !result) return;
       config = result; announce(); void poll();
     }).catch(report);
-    const timeout = setTimeout(() => { if (!stopped && pc?.connectionState !== 'connected') setError(pc?.remoteDescription ? 'Both cameras exchanged their connection details, but the network has not connected them. Try Reconnect cameras. If this continues, open Connection details below so we can identify the blocked step.' : 'Camera connection details have not arrived yet. Keep both photo pages open and try Reconnect cameras.'); }, 25000);
+    const timeout = setTimeout(() => { if (!stopped && pc?.connectionState !== 'connected') setError(current => current || (pc?.remoteDescription ? 'Both cameras exchanged their connection details, but the network has not connected them. Try Reconnect cameras. If this continues, open Connection details below so we can identify the blocked step.' : 'Camera connection details have not arrived yet. Keep both photo pages open and try Reconnect cameras.')); }, 25000);
     const hide = () => { stopped = true; clearTimeout(timer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
     window.addEventListener('pagehide', hide);
     return () => { stopped = true; clearTimeout(timer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide); };
