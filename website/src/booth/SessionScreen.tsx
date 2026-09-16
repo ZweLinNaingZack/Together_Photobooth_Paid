@@ -13,6 +13,7 @@ import { ScreenFlash, flashColors } from './ScreenFlash';
 import type { FlashColor } from './ScreenFlash';
 
 interface Props {
+  beforeReview: () => Promise<void>;
   room?: RoomSession | null; visible?: boolean;
   duoControl?: RefObject<((event: DuoEvent) => Promise<void>) | null>;
   onRemoteSession?: (index: number | null) => void;
@@ -60,6 +61,18 @@ export function SessionScreen(props: Props) {
   });
   const share = (event: DuoEvent) => { if (duo && peer.connected) void peer.send(event).catch(() => {}); };
   const ready = card.shots.filter(Boolean).length, complete = ready === layout.count;
+  const reviewLock = useRef(false);
+  async function review() {
+    if (reviewLock.current) return;
+    reviewLock.current = true; setBusy(true);
+    try {
+      await props.beforeReview();
+      if (!alive.current) return;
+      if (duo) await peer.send({ type: 'edit' });
+      props.onNext(!!stream);
+    } catch (e) { if (alive.current) setMessage(e instanceof Error ? e.message : 'Please retry.'); }
+    finally { reviewLock.current = false; if (alive.current) setBusy(false); }
+  }
   const locked = busy || remoteBusy || pending || props.interrupted;
   const canCapture = !!stream && videoReady && (!duo || !!props.room?.bothReady && peer.connected && remoteReady && !otherPaused);
 
@@ -171,7 +184,7 @@ export function SessionScreen(props: Props) {
         {props.flash && <p className="flash-note">Your screen lights up just before each photo. Keep your screen bright and your face close for more light.</p>}
       </div>
       <p id="session-status" aria-live="polite">{guest ? remoteBusy ? 'Your creator is taking your shared photos…' : complete ? 'Your photos are ready. Your creator can take you both to export.' : 'Ready when your creator is.' : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
-<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{guest ? 'Leave session' : 'Change design'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? `Retake photo ${retake + 1}` : method === 'manual' ? 'Take a photo' : ready ? 'Continue countdown' : 'Start the countdown'} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>Stop countdown</button><button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null || (duo && !peer.connected)} onClick={async () => { try { if (duo) await peer.send({ type: 'edit' }); props.onNext(!!stream); } catch (e) { setMessage(e instanceof Error ? e.message : 'Please reconnect.'); } }}>Make it yours</button></div>
+<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{guest ? 'Leave session' : 'Change design'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? `Retake photo ${retake + 1}` : method === 'manual' ? 'Take a photo' : ready ? 'Continue countdown' : 'Start the countdown'} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>Stop countdown</button><button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null || (duo && !peer.connected)} onClick={review}>Make it yours</button></div>
       {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={takeShot} retake={retake} />}
       <PhotoTray shots={card.shots} count={layout.count} retake={retake} disabled={locked || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
     </div>

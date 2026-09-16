@@ -11,7 +11,7 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
   const unverified = '44444444-4444-4444-8444-444444444444';
   try {
     // Minimal Supabase schemas. Storage HTTP size/MIME validation needs live QA.
-    await db.exec(`create role anon; create role authenticated;
+    await db.exec(`create role anon; create role authenticated; create role service_role;
       create schema auth; create schema storage;
       create table auth.users(id uuid primary key, email text, email_confirmed_at timestamptz);
       create function auth.uid() returns uuid language sql stable as
@@ -25,7 +25,7 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
         ('${admin}','zwelinnaing34@gmail.com',now()),
         ('${alice}','alice@example.test',now()),('${bob}','bob@example.test',now()),
         ('${unverified}','unverified@example.test',null);`);
-    for (const name of ['001-wallet-foundation.sql', '002-topups.sql', '003-correct-topup-pricing.sql']) {
+    for (const name of ['001-wallet-foundation.sql', '002-topups.sql', '003-correct-topup-pricing.sql', '004-hosted-rooms.sql', '005-session-charges.sql']) {
       await db.exec(await readFile(new URL(`../${name}`, import.meta.url), 'utf8'));
     }
     async function as(id, role = 'authenticated') {
@@ -70,5 +70,28 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     // Uploaded receipt cannot be replaced after approval.
     assert.equal((await db.query("update storage.objects set name='changed' returning id")).rows.length, 0);
     await as(bob); assert.equal((await wallet()).points, 0);
+    const free = '55555555-5555-4555-8555-555555555555';
+    const paid = '66666666-6666-4666-8666-666666666666';
+    const extra = '77777777-7777-4777-8777-777777777777';
+    const complete = async (id, room = null) => (await db.query('select together_complete_session($1,$2) as receipt',[id,room])).rows[0].receipt;
+    await as('', 'anon'); await assert.rejects(() => complete(free), /permission denied/);
+    await as(unverified); await assert.rejects(() => complete(free), /verified account/);
+    await db.exec('reset role');
+    await db.query("insert into together_rooms(code,invite,data,expires_at) values ('TESTAA','unique-invite',$1,now()+interval '1 hour')",[JSON.stringify({host:{userId:alice},invite:'unique-invite'})]);
+    await as(bob); await assert.rejects(() => complete(free,'TESTAA'), /Only the creator/);
+    assert.equal((await wallet()).trial_available,true, 'guest trial remains available');
+    await as(alice);
+    const receipts = await Promise.all([complete(free,'TESTAA'),complete(free,'TESTAA')]);
+    assert.equal(receipts[0].used_trial,true);
+    assert.equal((await wallet()).trial_available,false);
+    assert.equal((await wallet()).points,100);
+    assert.equal((await complete(extra,'TESTAA')).used_trial,true, 'same room cannot charge twice with a new request ID');
+    await complete(paid); await complete(paid);
+    assert.equal((await wallet()).points,0);
+    assert.equal((await wallet()).history.filter(row => row.kind === 'session').length,1);
+    await assert.rejects(() => complete(extra), /need 100 points/);
+    await as(bob); await assert.rejects(() => complete(paid), /Session unavailable/);
+    assert.equal((await wallet()).trial_available,true);
+    await assert.rejects(() => db.exec('update together_sessions set used_trial = false'), /permission denied/);
   } finally { await db.close(); }
 });

@@ -53,13 +53,13 @@ export function createRoomService({ now = Date.now, rtcConfig = createTurnProvid
     // Only authenticated room members can exchange connection metadata. Photos
     // and video travel directly between browsers, never through this queue.
     if (action === 'signal') {
-      const message = body.message;
+      const messages = body.messages === undefined ? [body.message] : body.messages;
       if (!room.guest || !room.host.ready || !room.guest.ready) throw fail('Both people must be ready before connecting.', 409);
-      if (!message || !['hello', 'offer', 'answer', 'candidate'].includes(message.type) || typeof message.session !== 'string' || message.session.length > 80 || JSON.stringify(message).length > 24000) throw fail('Invalid camera connection message.');
+      if (!Array.isArray(messages) || !messages.length || messages.length > 8 || JSON.stringify(messages).length > 24000 || messages.some(message => !message || !['hello', 'offer', 'answer', 'candidate'].includes(message.type) || typeof message.session !== 'string' || message.session.length > 80)) throw fail('Invalid camera connection message.');
       room.signals = room.signals.filter(s => now() - s.at < 60000);
-      if (typeof message.id === 'string' && room.signals.some(s => s.from === role && s.message.id === message.id)) return { sent: true };
-      if (room.signals.length >= 256) throw fail('Connection busy. Please reconnect in a moment.', 429);
-      room.signals.push({ id: ++room.signalId, from: role, at: now(), message });
+      const fresh = messages.filter((message, index) => typeof message.id !== 'string' || !room.signals.some(s => s.from === role && s.message.id === message.id) && !messages.slice(0,index).some(s => s.id === message.id));
+      if (room.signals.length + fresh.length > 256) throw fail('Connection busy. Please reconnect in a moment.', 429);
+      for (const message of fresh) room.signals.push({ id: ++room.signalId, from: role, at: now(), message });
       return { sent: true };
     }
     if (action === 'signals') {

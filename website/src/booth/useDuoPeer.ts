@@ -29,7 +29,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     setRemote(null); setConnected(false); setError('');
     const report = (e: unknown) => { if (!stopped) setError(e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'); };
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
-    const enqueueSignal = createSignalQueue((payload: Signal) => roomRequest('signal', { ...auth, message: payload }), () => stopped);
+    const enqueueSignal = createSignalQueue((messages: Signal[]) => roomRequest('signal', { ...auth, messages }), () => stopped, true);
     const signal = (message: Signal) => enqueueSignal({ ...message, id: crypto.randomUUID() });
     function closePeer() {
       channel?.close(); pc?.close(); channel = null; pc = null; incoming.clear();

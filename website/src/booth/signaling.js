@@ -1,6 +1,6 @@
 // One in-flight write per camera prevents ICE bursts from contending for the
 // same persisted room. Descriptions take priority over queued ICE candidates.
-export function createSignalQueue(post, stopped = () => false) {
+export function createSignalQueue(post, stopped = () => false, batch = false) {
   const pending = [];
   let running = false;
   async function drain() {
@@ -9,11 +9,11 @@ export function createSignalQueue(post, stopped = () => false) {
     try {
       while (pending.length) {
         const priority = pending.findIndex(item => item.message.type !== 'candidate');
-        const [item] = pending.splice(priority < 0 ? 0 : priority, 1);
+        const items = priority >= 0 ? pending.splice(priority, 1) : pending.splice(0, batch ? 8 : 1);
         try {
-          if (!stopped()) await sendSignal(post, item.message, stopped);
-          item.resolve();
-        } catch (error) { item.reject(error); }
+          if (!stopped()) await sendSignal(post, batch ? items.map(item => item.message) : items[0].message, stopped);
+          items.forEach(item => item.resolve());
+        } catch (error) { items.forEach(item => item.reject(error)); }
       }
     } finally { running = false; }
   }

@@ -36,6 +36,19 @@ test('old signaling expires instead of replaying a previous camera negotiation',
   assert.deepEqual(service.run('signals', { ...auth(host), after: 0 }).messages, []);
 });
 
+test('route batches deliver once and invalid batches do not partly write', () => {
+  const service = createRoomService();
+  const host = service.run('create', { settings }), guest = service.run('join', { code: host.code });
+  service.run('ready', { ...auth(host), ready: true }); service.run('ready', { ...auth(guest), ready: true });
+  const messages = Array.from({length:8}, (_,id) => ({id:String(id),type:'candidate',session:'camera',candidate:{candidate:'test'}}));
+  service.run('signal', {...auth(host),messages});
+  service.run('signal', {...auth(host),messages});
+  assert.equal(service.run('signals',{...auth(guest),after:0}).messages.length,8);
+  assert.throws(() => service.run('signal',{...auth(host),messages:[{id:'new',type:'hello',session:'camera'},null]}), /Invalid/);
+  assert.throws(() => service.run('signal',{...auth(host),messages:[...messages,messages[0]]}), /Invalid/);
+  assert.equal(service.run('signals',{...auth(guest),after:0}).messages.length,8);
+});
+
 test('capture waits for a shared photo to arrive before starting the next photo', async () => {
   const events = [];
   await captureSequence({ shots: [], count: 2, retake: null, method: 'timer', seconds: 0, signal: new AbortController().signal,

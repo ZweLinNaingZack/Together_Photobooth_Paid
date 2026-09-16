@@ -24,3 +24,15 @@ test('cancelling a camera discards its pending messages', async () => {
   await Promise.all([queue({type:'candidate'}), queue({type:'offer'})]);
   assert.equal(calls, 1);
 });
+
+test('32 routes use bounded batches rather than 32 server round trips', async () => {
+  const batches = [];
+  const queue = createSignalQueue(async messages => {
+    await new Promise(resolve => setTimeout(resolve,1));
+    batches.push(messages);
+  }, () => false, true);
+  await Promise.all(Array.from({length:32}, (_,id) => queue({type:'candidate',id})));
+  assert.equal(batches.length,5);
+  assert.equal(batches.flat().length,32);
+  assert.ok(batches.every(batch => batch.length <= 8));
+});

@@ -102,8 +102,22 @@ camera test still need the manual checks above. Polling performs database reads
 and writes; monitor Supabase and Vercel usage during testing and choose a function
 region near the Supabase project in Vercel settings where supported.
 
-Session charging/free-trial consumption remains unfinished. Hosting this build
-does not enable paid-session enforcement. Use it as a test deployment for now.
+Before deploying the session charging update, run `005-session-charges.sql`
+in the Supabase SQL Editor after migrations 001–004. No additional keys are needed.
+Camera sessions consume the creator's trial or 100 points after the final shot;
+uploads do so when continuing to filters/export. Guests are not charged.
+Retakes and repeated exports within that session are included. Database locks
+and unique session/room references prevent duplicate charges on retries.
+Insufficient funds block the normal export flow and keep the photos in the tab.
+Open the account link in its separate tab, top up, then retry confirmation.
+
+Test a fresh account's trial, a second session with exactly 100 points, an
+insufficient balance, duplicate clicks, retakes, and a duo guest with zero points.
+Duo billing needs the hosted room database: use Vercel or `vercel dev`, not the
+legacy in-memory `pnpm dev` room service. Local solo/upload billing uses Supabase.
+Photo composition is still client-side. This is normal-flow billing, not a
+tamper-proof paid export service; server-issued entitlements and controlled
+export delivery are needed before treating it as such.
 
 Vercel Hobby is restricted to personal, non-commercial use. For this paid
 business choose an appropriate commercial plan rather than assuming Hobby applies.
