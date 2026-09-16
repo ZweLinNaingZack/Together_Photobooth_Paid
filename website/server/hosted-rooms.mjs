@@ -19,6 +19,7 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
         const member = room.host.token === body.token ? room.host : room.guest?.token === body.token ? room.guest : null;
         if (!member || member.userId !== userId) throw fail('You are not connected to this booth.',403);
       }
+      if (action === 'rtc' && store.authorize && !await store.authorize(room.invite,room.host.userId)) throw fail('The creator needs to authorize this booth before the cameras connect.',409);
       const rooms = new Map(room ? [[room.code,room]] : []);
       const service = createRoomService({ rooms, rtcConfig: requestRtcConfig });
       const result = await service.run(action, body, userId);
@@ -38,6 +39,10 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
 
 export function supabaseRoomStore(client) {
   return {
+    async authorize(invitation,creator) {
+      const {data,error} = await client.rpc('together_room_has_ticket',{invitation,creator});
+      if(error) throw error; return data;
+    },
     async limit(bucket,maximum) {
       const { data,error } = await client.rpc('together_room_limit',{bucket,maximum});
       if (error) throw error; return data;

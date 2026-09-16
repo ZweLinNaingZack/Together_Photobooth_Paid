@@ -1,6 +1,6 @@
 import { DecorativeIcon } from './components/DecorativeIcon';
 import { useEffect, useRef, useState } from 'react';
-import { GoogleAccount as Account } from './auth/GoogleAccount';
+import { Account } from './auth/Account';
 import { useAuth } from './auth/AuthProvider';
 import { SignInDialog } from './components/SignInDialog';
 import { Home } from './pages/Home';

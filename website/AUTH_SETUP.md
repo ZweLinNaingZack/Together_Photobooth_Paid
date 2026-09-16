@@ -1,6 +1,6 @@
 # Together account setup
 
-The React account page is at `/#account`. Supabase Auth stores accounts and manages sessions. The booth remains available without an account during this initial integration. Points, orders, receipt storage, and admin approval are not yet implemented.
+The account page is at `/#account`. Follow `AUTH_PROTECTION_SETUP.md` for the current Gmail-only signup policy, Turnstile activation, session reservations, and paused email flows. Booth access requires an account. Wallets, manual top-ups and administrator review are implemented.
 
 ## Dashboard configuration
 

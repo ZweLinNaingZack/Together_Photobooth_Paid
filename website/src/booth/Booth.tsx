@@ -107,7 +107,10 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   }
   async function createParty() {
     const created = await party.create({ layout: card.layout, template: card.template, source });
-    if (created) setStep('room');
+    if (created) {
+      try { await charge.reserve(created.code); setStep('room'); }
+      catch { party.end(); }
+    }
   }
   async function joinParty(code: string) {
     const joined = await party.join(code, useInvite ? invite : null);
@@ -115,7 +118,15 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   }
   async function enterParty() {
     const state = await party.check();
-    if (state?.bothReady) setStep(source === 'upload' ? 'upload' : 'session');
+    if (state?.bothReady) {
+      try { if (party.room?.role === 'host') await charge.reserve(party.room.code); setStep(source === 'upload' ? 'upload' : 'session'); } catch { /* Keep the authorization error visible. */ }
+    }
+  }
+  async function startSession() {
+    if (charge.busy || party.busy) return;
+    setRestoreCamera(false);
+    if (mode === 'duo' && source === 'camera') { await createParty(); return; }
+    try { await charge.reserve(); setStep(source === 'upload' ? 'upload' : 'session'); } catch { /* Keep the design and show the error. */ }
   }
   const visibleProgress: [Step, string][] = mode === 'duo' && ['duo', 'join', 'room'].includes(step) ? [['duo', 'Create or join'], ['join', 'Invitation'], ['room', 'Your party']] : progress;
   return <>
@@ -123,6 +134,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       <div className="flow-top"><a href="#" className="back-link">Leave the booth</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>How it works</button></div>
       <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
+        {active && charge.error && <div className="camera-connection-error" role="alert"><p>{charge.error}</p><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></div>}
         {active && ['session','upload','edit'].includes(step) && <div className="session-note" aria-live="polite">
           {party.room?.role === 'guest' ? 'Your creator covers this session. No points or free trial are used from your account.' : charge.busy ? 'Confirming your session…' : charge.receipt || 'One completed session uses your free trial first, otherwise 100 points.'}
           {charge.error && <div role="alert"><p>{charge.error}</p><button className="outline-button" disabled={charge.busy} onClick={() => void completeSession().catch(() => {})}>Retry confirmation</button> <a href="#account" target="_blank" rel="noopener noreferrer">Open account & top up</a></div>}
@@ -138,7 +150,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         {active && step === 'room' && party.room && <WaitingRoom room={party.room} busy={party.busy} error={party.error} onReady={value => { void party.ready(value); }} onContinue={enterParty} onLeave={() => requestLeave(() => { party.end(); setStep('duo'); })} />}
         {active && step === 'layout' && <LayoutScreen selected={card.layout} onSelect={layout => { if (layout !== card.layout) change({ layout, shots: [], template: layout === 'N' ? 'newspaper' : null }); setRetake(null); }} onBack={() => setStep(mode === 'duo' ? 'duo' : 'mode')} onNext={() => setStep('source')} />}
         {active && step === 'source' && <SourceScreen mode={mode} onBack={() => setStep('layout')} onChoose={choice => { if (choice !== source) change({ shots: [] }); setSource(choice); setRetake(null); setStep('design'); }} />}
-        {active && step === 'design' && <><DesignScreen busy={party.busy} card={card} onSelect={template => change({ template })} onBack={() => { party.end(); setStep('source'); }} nextLabel={party.busy ? 'Creating your booth…' : mode === 'duo' && source === 'camera' ? 'Create invitation' : source === 'upload' ? 'Choose your photos' : 'Take the photos now'} onNext={() => { setRestoreCamera(false); if (mode === 'duo' && source === 'camera') void createParty(); else setStep(source === 'upload' ? 'upload' : 'session'); }} /><p className="room-error" role="alert">{party.error}</p></>}
+        {active && step === 'design' && <><DesignScreen busy={party.busy || charge.busy} card={card} onSelect={template => change({ template })} onBack={() => { charge.reset(); party.end(); setStep('source'); }} nextLabel={party.busy || charge.busy ? 'Preparing your booth…' : mode === 'duo' && source === 'camera' ? 'Create invitation' : source === 'upload' ? 'Choose your photos' : 'Take the photos now'} onNext={() => void startSession()} /><p className="room-error" role="alert">{party.error}</p></>}
         {active && (step === 'session' || step === 'edit' && party.room && source === 'camera') && <div hidden={step !== 'session'}><SessionScreen room={party.room} visible={step === 'session'} duoControl={duoControl} onSharedPhotos={shots => change({ shots })} onRemoteSession={index => { setRetake(index); setStep('session'); }} card={card} method={method} seconds={seconds} onMethod={setMethod} onSeconds={setSeconds} retake={retake} onRetake={setRetake} restoreCamera={restoreCamera} interrupted={instructions || !!pendingLeave} flash={flash} flashColor={flashColor} onFlashChange={setFlash} onFlashColor={setFlashColor} mirror={mirror} onMirrorChange={setMirror}
           beforeReview={completeSession} onShot={(index, shot) => setCard(current => ({ ...current, shots: replaceShot(current.shots, index, shot) }))} onMove={reorder} onBack={() => goBack('design')} onNext={wasCamera => { setRestoreCamera(wasCamera); setRetake(null); setStep('edit'); }} /></div>}
         {active && step === 'upload' && mode === 'solo' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('design')} onNext={() => void reviewUploads()} />}
