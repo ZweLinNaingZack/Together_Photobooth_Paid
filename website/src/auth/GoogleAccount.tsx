@@ -5,7 +5,7 @@ import { Wallet } from './Wallet';
 import './account.css';
 
 // Google-only test phase. Account.tsx retains the email flows for later use.
-export function GoogleAccount() {
+export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy' | 'admin' }) {
   const { user, loading, error: callbackError } = useAuth();
   const [available, setAvailable] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -38,21 +38,21 @@ export function GoogleAccount() {
     const saved = sessionStorage.getItem('together-after-signin');
     if (saved === '#booth' || saved?.startsWith('#booth?')) returnTo = saved;
   } catch { /* Continue without the optional invitation hint. */ }
-  return <section className="account-page" aria-labelledby="account-title">
+  return <section className={`account-page ${user ? 'account-workspace' : ''}`} aria-labelledby="account-title">
     <div className="eyebrow">YOUR LITTLE PLACE AT TOGETHER</div>
-    <h1 id="account-title">{user ? 'Welcome back.' : 'A little closer.'}</h1>
-    <p className="account-intro">{user ? 'Your account, ready for your next little moment.' : 'Sign in with Google to start making memories.'}</p>
+    <h1 id="account-title">{user ? page === 'buy' ? 'More moments await.' : page === 'admin' ? 'Payment reviews.' : 'Your little moments.' : 'A little closer.'}</h1>
+    <p className="account-intro">{user ? user.email : 'Sign in with Google to start making memories.'}</p>
     <div className="account-panel">
       {loading ? <p role="status">Checking your account…</p> : !supabase ? <p role="alert">Sign-in is not configured yet. Please try again later.</p> : user ? <>
-        <span className="eyebrow">SIGNED IN AS</span><p className="account-email">{user.email}</p>
-        <Wallet key={user.id} userId={user.id} />
+        <Wallet key={user.id} userId={user.id} page={page} />
+        <div className="account-footer-actions">
         <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional hint. */ } }}>Take the photos now</a>
         <button className="text-button" disabled={busy} onClick={async () => {
           if (lock.current) return; lock.current = true; setBusy(true); setError('');
           try { const { error } = await supabase!.auth.signOut({ scope: 'local' }); if (error) throw error; }
           catch { setError('We couldn’t sign you out. Please try again.'); }
           finally { lock.current = false; setBusy(false); }
-        }}>Sign out</button>
+        }}>Sign out</button></div>
       </> : <>
         <button className="outline-button account-google" disabled={busy || available !== true} onClick={() => void signIn()}>
           {busy ? 'Opening Google…' : available === null ? 'Checking Google sign-in…' : 'Continue with Google'}

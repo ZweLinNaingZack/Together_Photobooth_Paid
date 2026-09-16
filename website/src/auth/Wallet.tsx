@@ -3,7 +3,7 @@ import { supabase } from './client';
 import { Topups } from './Topups';
 
 type WalletData = { points: number; trial_available: boolean; is_admin: boolean; history: { id: string; points: number; kind: string; created_at: string }[] };
-export function Wallet({ userId }: { userId: string }) {
+export function Wallet({ userId, page = 'overview' }: { userId: string; page?: 'overview' | 'buy' | 'admin' }) {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -24,22 +24,22 @@ export function Wallet({ userId }: { userId: string }) {
     }
     void read();
     return () => { active = false; };
-  }, [userId, attempt]);
+  }, [userId, attempt, page]);
   return <section className="wallet-panel" aria-label="Your points">
-    <h2>Your little moments</h2>
     {error ? <><p role="alert">{error}</p><button className="text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></> : !wallet ? <p role="status">Loading your points…</p> : <>
-      <p className="wallet-balance">{wallet.points.toLocaleString()} <span>points</span></p>
+      <nav className="account-tabs" aria-label="Account pages"><a href="#account" aria-current={page === 'overview' ? 'page' : undefined}>Overview</a><a href="#account/buy" aria-current={page === 'buy' ? 'page' : undefined}>Buy points</a>{wallet.is_admin && <a href="#account/admin" aria-current={page === 'admin' ? 'page' : undefined}>Admin reviews</a>}</nav>
+      {page === 'overview' && <div className="wallet-grid"><section className="dashboard-card balance-card"><span className="eyebrow">YOUR BALANCE</span><p className="wallet-balance">{wallet.points.toLocaleString()} <span>points</span></p><p>100 points for one session.</p><a className="primary" href="#account/buy">Buy points</a></section><section className="dashboard-card"><span className="eyebrow">YOUR FIRST MEMORY</span><p className="wallet-balance">{wallet.trial_available ? '01' : '00'} <span>free session</span></p>
       <p>{wallet.trial_available ? '1 free session available' : 'Your free session has been used'}</p>
-      <p>One session · 100 points</p>
-      <p>7,000 MMK · 100 points · 1 session</p>
+      <p>Your free session is used before your points.</p></section><section className="dashboard-card activity-card"><div className="section-heading"><h2>Recent activity</h2>
       <button className="text-button" onClick={() => setAttempt(n => n + 1)}>Refresh balance</button>
-      {wallet.is_admin && <p>Administrator account</p>}
-      <h3>Recent point activity</h3>
+      </div>
       {wallet.history.length === 0 ? <p>No point activity yet.</p> : <ul>{wallet.history.map(entry => <li key={entry.id}>
         {entry.kind === 'topup' ? 'Points added' : entry.kind === 'refund' ? 'Session refund' : 'Photobooth session'} · {entry.points > 0 ? '+' : ''}{entry.points} points
         <small> · {new Date(entry.created_at).toLocaleDateString()}</small>
       </li>)}</ul>}
-      <Topups userId={userId} admin={wallet.is_admin} onCredit={() => setAttempt(n => n + 1)} />
+      </section></div>}
+      {page === 'buy' && <Topups key="buy" userId={userId} admin={false} onCredit={() => setAttempt(n => n + 1)} />}
+      {page === 'admin' && (wallet.is_admin ? <Topups key="admin" userId={userId} admin onCredit={() => {}} /> : <p role="alert">This page is available to administrators only.</p>)}
     </>}
   </section>;
 }

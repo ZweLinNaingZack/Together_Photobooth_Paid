@@ -25,7 +25,9 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
         ('${admin}','zwelinnaing34@gmail.com',now()),
         ('${alice}','alice@example.test',now()),('${bob}','bob@example.test',now()),
         ('${unverified}','unverified@example.test',null);`);
-    for (const name of ['001-wallet-foundation.sql', '002-topups.sql', '003-correct-topup-pricing.sql', '004-hosted-rooms.sql', '005-session-charges.sql']) {
+    await db.exec("alter table auth.users add column raw_user_meta_data jsonb default '{}'::jsonb");
+    await db.query('update auth.users set raw_user_meta_data=$1 where id=$2', [JSON.stringify({ full_name: 'Alice Example' }), alice]);
+    for (const name of ['001-wallet-foundation.sql', '002-topups.sql', '003-correct-topup-pricing.sql', '004-hosted-rooms.sql', '005-session-charges.sql', '006-admin-order-identities.sql']) {
       await db.exec(await readFile(new URL(`../${name}`, import.meta.url), 'utf8'));
     }
     async function as(id, role = 'authenticated') {
@@ -52,12 +54,16 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     await assert.rejects(() => db.exec("update public.together_accounts set trial_used_at = now()"), /permission denied/);
     await assert.rejects(() => db.query('insert into public.together_admins(user_id) values ($1)',[alice]), /permission denied/);
     await as(bob); await wallet();
+    await assert.rejects(() => db.query('select together_admin_orders()'), /Administrator required/);
     assert.equal((await db.query('select * from storage.objects')).rows.length, 0);
     assert.equal((await db.query('select * from public.together_topups')).rows.length, 0);
     await assert.rejects(() => submit(first), /Request unavailable/);
     await assert.rejects(() => upload(first), /row-level security/);
     const second = await start(); await upload(second); await submit(second);
     await as(admin); assert.equal((await wallet()).is_admin, true);
+    const orders = (await db.query('select together_admin_orders() as orders')).rows[0].orders;
+    assert.equal(orders.find(r => r.id === first.id).customer_email, 'alice@example.test');
+    assert.equal(orders.find(r => r.id === first.id).customer_name, 'Alice Example');
     assert.equal((await db.query('select * from storage.objects')).rows.length, 2);
     await review(first,true,'bank-123'); await review(first,true,'bank-123');
     await assert.rejects(() => review(first,false,'','Changed mind'), /Only pending/);

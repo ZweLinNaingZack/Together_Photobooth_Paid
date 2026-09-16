@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from './client';
 
-type Request = { id: string; user_id: string; points: number; status: 'draft' | 'pending' | 'approved' | 'rejected'; created_at: string; review_note: string | null };
+type Request = { id: string; user_id: string; points: number; status: 'draft' | 'pending' | 'approved' | 'rejected'; created_at: string; review_note: string | null; customer_name?: string; customer_email?: string };
 const receiptPath = (r: Request) => `${r.user_id}/${r.id}/receipt`;
 function failure(error: { code?: string }) {
+  if (error.code === 'PGRST202') return 'The order dashboard needs its database update. Please run migration 006 and refresh.';
   if (error.code === '23505') return 'This bank transaction has already been credited. Please check the reference.';
   if (error.code === 'P0001') return 'The request could not be completed. Check its status and details, or try again later.';
   return 'We couldn’t complete that request. Refresh the payment history before retrying.';
@@ -15,13 +16,15 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
   const [review, setReview] = useState(''), [reference, setReference] = useState(''), [note, setNote] = useState(''), [verified, setVerified] = useState(false);
   const lock = useRef(false);
   async function refresh() {
+    if (!admin) {
     const own = await supabase!.from('together_topups').select('id,user_id,points,status,created_at,review_note').eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
     if (own.error) { setReady(false); throw own.error; }
     setRequests(own.data as Request[]); setReady(true);
-    if (admin) {
-      const pending = await supabase!.from('together_topups').select('id,user_id,points,status,created_at,review_note').eq('status', 'pending').order('created_at').limit(50);
+    } else {
+      const pending = await supabase!.rpc('together_admin_orders');
       if (pending.error) throw pending.error;
       setQueue(pending.data as Request[]);
+      setReady(true);
     }
   }
   async function run(work: () => Promise<void>) {
@@ -38,6 +41,7 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
   }
   const open = requests.find(r => r.status === 'draft' || r.status === 'pending');
   return <div className="topups">
+    {!admin && <div className="purchase-grid"><section className="dashboard-card purchase-card">
     <h3>Keep making memories</h3>
     <p>7,000 MMK buys 100 points — enough for 1 session.</p>
     <p className="topup-notice">Payments are reviewed by a person. Points arrive after approval, which may take until the next day. You can close this page and return to My account to check.</p>
@@ -47,10 +51,10 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
     })}>Buy 100 points</button> : open.status === 'pending' ? <p role="status">Your 7,000 MMK payment is awaiting review. Please don’t transfer again for this request.</p> : <div className="topup-checkout">
       <h3>Pay with KBZPay</h3>
       <p>Transfer exactly <strong>7,000 MMK</strong> using this QR, then upload your payment receipt below. If you already paid, continue with the receipt only.</p>
-      <img className="bank-qr" src="/kbzpay-topup.png" alt="KBZPay payment QR for 7,000 MMK" />
+      <div className="checkout-columns"><div><img className="bank-qr" src="/kbzpay-topup.png" alt="KBZPay payment QR for 7,000 MMK" />
       <a href="/kbzpay-topup.png" download="Together-KBZPay.png">Save QR image</a>
       <p>On your phone, save the image and select it in KBZPay’s scanner if supported.</p>
-      <label>Payment receipt<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+      </div><div className="receipt-upload"><label>Payment receipt<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} /></label>
       <small>JPG, PNG or WebP, up to 5 MB. Receipts are visible only to you and the administrator. Once uploaded, a receipt cannot be replaced.</small>
       <button className="primary" disabled={busy} onClick={() => void run(async () => {
         if (file) {
@@ -61,9 +65,9 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
         }
         const { error } = await supabase!.rpc('together_submit_topup', { request_id: open.id }); if (error) throw error;
         await refresh();
-      })}>{busy ? 'Please wait…' : file ? 'Upload and submit receipt' : 'Submit saved receipt'}</button>
+      })}>{busy ? 'Please wait…' : file ? 'Upload and submit receipt' : 'Submit saved receipt'}</button></div></div>
     </div>}
-    <h3>Your payment requests</h3>
+    </section><section className="dashboard-card purchase-history"><h3>Your payment requests</h3>
     <button className="text-button" disabled={busy} onClick={() => void run(refresh)}>Refresh payment status</button>
     {requests.length === 0 && ready && <p>No payment requests yet.</p>}
     <ul className="payment-list">{requests.map(r => <li key={r.id}>
@@ -72,13 +76,18 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
       {r.review_note && <p>{r.review_note}</p>}
       <button className="text-button" disabled={busy} onClick={() => void run(() => view(r))}>View saved receipt</button>
     </li>)}</ul>
-    {admin && <section className="admin-payments"><h3>Payment reviews</h3><p>Check the incoming payment in KBZPay before approving. A receipt image alone is not proof of payment.</p>
-      {queue.length === 0 && ready && <p>No pending payments.</p>}
-      {queue.map(r => <div key={r.id} className="payment-review">
-        <p>7,000 MMK → 100 points</p><small>Request {r.id}<br />Account {r.user_id}</small>
-        <button className="text-button" disabled={busy} onClick={() => void run(async () => { await view(r); setReview(r.id); setReference(''); setNote(''); setVerified(false); })}>Review receipt</button>
+    </section></div>}
+    {admin && <section className="admin-payments"><div className="section-heading"><div><h2>{queue.filter(r => r.status === 'pending').length} awaiting review</h2><p>Check the incoming payment in KBZPay before approving.</p></div><button className="outline-button" disabled={busy} onClick={() => void run(refresh)}>Refresh orders</button></div>
+      {!ready && <p role="status">{busy ? 'Loading orders…' : 'Orders are unavailable. Please refresh.'}</p>}
+      {queue.length === 0 && ready && <p className="dashboard-card">No submitted orders yet.</p>}
+      {queue.length > 0 && <div className="admin-grid"><aside className="dashboard-card order-list" aria-label="Customer orders"><h3>Latest orders</h3>{queue.map(r => <button key={r.id} className="order-row" aria-pressed={review === r.id} disabled={busy} onClick={() => void run(async () => { setReceipt(null); setReview(r.id); setReference(''); setNote(''); setVerified(false); await view(r); })}><strong>{r.customer_name || 'Customer'}</strong><span>{r.customer_email || r.user_id}</span><span className={`order-status status-${r.status}`}>{r.status === 'pending' ? 'Awaiting review' : r.status}</span><small>{new Date(r.created_at).toLocaleString()} · {r.id.slice(0,8)}</small></button>)}</aside><div className="dashboard-card order-detail">
+      {!review && <div className="empty-state"><h3>Select an order</h3><p>View the customer, receipt and transaction details here.</p></div>}
+      {queue.filter(r => r.id === review).map(r => <div key={r.id} className="payment-review">
+        <h3>{r.customer_name || 'Customer'}</h3><p className="customer-email">{r.customer_email || r.user_id}</p><p>7,000 MMK · {r.points} points · <strong>{r.status}</strong></p><small>Request {r.id}</small>
+        <button className="text-button" disabled={busy} onClick={() => void run(() => view(r))}>Refresh receipt preview</button>
         {review === r.id && <>
           {receipt?.id === r.id && <img className="bank-qr" src={receipt.url} alt="Receipt being reviewed" />}
+          {r.status === 'pending' ? <>
           <label>Actual bank transaction reference<input value={reference} maxLength={100} onChange={e => setReference(e.target.value)} disabled={busy} /></label>
           <label>Note to the user (required when rejecting)<input value={note} maxLength={500} onChange={e => setNote(e.target.value)} disabled={busy} /></label>
           <label className="payment-check"><input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} disabled={busy} />I checked KBZPay and received 7,000 MMK for this request.</label>
@@ -90,8 +99,9 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
             const { error } = await supabase!.rpc('together_review_topup', { request_id: r.id, approve: false, transfer_reference: '', note });
             if (error) throw error; setReview(''); setReceipt(null); await refresh();
           })}>Reject request</button>
+          </> : <p>{r.review_note || 'This order has already been reviewed.'}</p>}
         </>}
-      </div>)}
+      </div>)}</div></div>}
     </section>}
     {receipt && receipt.id !== review && <div className="receipt-view"><h3>Receipt · {receipt.id.slice(0,8)}</h3><img src={receipt.url} alt="Uploaded payment receipt" /><button className="text-button" onClick={() => setReceipt(null)}>Close receipt</button><small>This preview expires after five minutes. Open it again to refresh.</small></div>}
     {error && <p role="alert" className="account-error">{error}</p>}
