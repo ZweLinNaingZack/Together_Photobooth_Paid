@@ -61,7 +61,7 @@ export function SessionScreen(props: Props) {
   const share = (event: DuoEvent) => { if (duo && peer.connected) void peer.send(event).catch(() => {}); };
   const ready = card.shots.filter(Boolean).length, complete = ready === layout.count;
   const locked = busy || remoteBusy || pending || props.interrupted;
-  const canCapture = !!stream && videoReady && (!duo || peer.connected && remoteReady && !otherPaused);
+  const canCapture = !!stream && videoReady && (!duo || !!props.room?.bothReady && peer.connected && remoteReady && !otherPaused);
 
   function stopCamera() {
     requestId.current++; requesting.current = false;
@@ -100,6 +100,7 @@ export function SessionScreen(props: Props) {
   useEffect(() => { setRemoteReady(false); if (remoteVideo.current) { remoteVideo.current.srcObject = peer.remote; void remoteVideo.current.play().catch(() => {}); } }, [peer.remote]);
   useEffect(() => { void toggleCamera(); }, []);
   useEffect(() => { if (props.interrupted) stopCapture(); }, [props.interrupted]);
+  useEffect(() => { if (duo && !props.room?.bothReady) stopCapture(); }, [duo, props.room?.bothReady]);
   useEffect(() => { share({ type: 'mirror', value: props.mirror }); }, [props.mirror, peer.connected]);
   useEffect(() => { if (!guest && peer.connected) share({ type: 'photos', shots: card.shots }); }, [peer.connected]);
   useEffect(() => { share({ type: 'paused', value: props.interrupted }); }, [props.interrupted, peer.connected]);

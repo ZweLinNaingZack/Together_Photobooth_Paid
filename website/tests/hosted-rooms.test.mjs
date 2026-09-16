@@ -9,12 +9,13 @@ test('hosted rooms persist across instances, handle racing joins and protect mem
  try {
   await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
   await db.exec(await readFile(new URL('../004-hosted-rooms.sql',import.meta.url),'utf8'));
+  let conflictingWrites = 0, turnCalls = 0;
   const store = {
    async limit(bucket,maximum) { return (await db.query('select together_room_limit($1,$2) as value',[bucket,maximum])).rows[0].value; },
    async load(body) { return (await db.query(`select data,version from together_rooms where ${body.invite ? 'invite' : 'code'}=$1`,[body.invite || body.code])).rows[0]; },
-   async save(code,version,data) { return (await db.query('select together_save_room($1,$2,$3) as value',[code,version,data ? JSON.stringify(data) : null])).rows[0].value; }
+   async save(code,version,data) { if (conflictingWrites > 0) { conflictingWrites--; return false; } return (await db.query('select together_save_room($1,$2,$3) as value',[code,version,data ? JSON.stringify(data) : null])).rows[0].value; }
   };
-  const service = () => createHostedRoomService({store,rtcConfig:async()=>({iceServers:[{urls:'turn:test',username:'test',credential:'test'}],relayConfigured:true})});
+  const service = () => createHostedRoomService({store,rtcConfig:async()=>{turnCalls++; return {iceServers:[{urls:'turn:test',username:'test',credential:'test'}],relayConfigured:true};}});
   const run = (action,body,user) => service().run(action,body,user);
   await assert.rejects(()=>run('create',{},null),/sign in/);
   const host=await run('create',{settings:{layout:'A',source:'camera',template:null}},'host');
@@ -29,9 +30,12 @@ test('hosted rooms persist across instances, handle racing joins and protect mem
   await Promise.all([1,2].map(id=>run('signal',{code:host.code,token:host.token,message:{type:'hello',session:'test',id:String(id)}},'host')));
   const messages=await run('signals',{code:guest.code,token:guest.token,after:0},guestId);
   assert.equal(messages.messages.length,2);
+  conflictingWrites = 3; // Heartbeats race with the slow TURN request.
   const rtc=await run('rtc',{code:host.code,token:host.token},'host');
+  assert.equal(turnCalls,1, 'Room version conflicts must not generate TURN credentials repeatedly');
   assert.equal(rtc.relayConfigured,true);
   assert.deepEqual(await run('rtc',{code:host.code,token:host.token},'host'),rtc);
+  assert.equal(turnCalls,1, 'Persisted TURN credentials survive later server instances');
   await run('leave',{code:host.code,token:host.token},'host');
   await assert.rejects(()=>run('state',{code:guest.code,token:guest.token},guestId),/expired/);
   await db.exec('set role authenticated');

@@ -72,7 +72,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     return () => window.removeEventListener('pagehide', clearOnDeparture);
   }, []);
   useEffect(() => { if (active) { setUseInvite(true); setStep(invite ? 'join' : 'mode'); if (invite) setMode('duo'); setRetake(null); setRestoreCamera(false); setInstructions(!invite); } else { setInstructions(false); party.end(); } }, [active, invite]);
-  useEffect(() => { if (party.room && !party.room.bothReady && (step === 'session' || step === 'upload')) setStep('room'); }, [party.room?.bothReady, step]);
+  // A missed heartbeat must not unmount the camera or silently send one user back.
   useEffect(() => { if (active && !instructions) { screen.current?.querySelector('h1')?.focus({ preventScroll: true }); window.scrollTo(0, 0); } }, [step, active, instructions]);
   const change = (patch: Partial<CardState>) => setCard(current => ({ ...current, ...patch }));
   const reorder = (from: number, to: number) => {
@@ -111,6 +111,11 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       <div className="flow-top"><a href="#" className="back-link">Leave the booth</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>How it works</button></div>
       <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
+        {active && step === 'session' && party.room && (party.error || !party.room.bothReady) && <div className="camera-connection-error" role="alert">
+          <p>{party.error || 'Your person is temporarily offline or not ready. Your photos are still here.'}</p>
+          <button className="outline-button" disabled={party.busy} onClick={() => void party.check()}>Check connection</button>
+          <button className="text-button" onClick={() => setStep('room')}>Return to waiting room</button>
+        </div>}
         {active && step === 'mode' && <ModeScreen onChoose={choice => { setMode(choice); clearPhotos(); setStep(choice === 'duo' ? 'duo' : 'layout'); }} />}
         {active && step === 'duo' && <DuoChoice onCreate={() => { party.end(); setStep('layout'); }} onJoin={() => { party.end(); setUseInvite(false); setStep('join'); }} onBack={() => setStep('mode')} />}
         {active && step === 'join' && <JoinRoom invite={useInvite ? invite : null} busy={party.busy} error={party.error} onJoin={joinParty} onBack={() => { party.end(); setStep('duo'); }} />}

@@ -4,8 +4,13 @@ const fail = (message, status) => Object.assign(new Error(message), { status });
 export function createHostedRoomService({ store, rtcConfig = createTurnProvider() }) {
   return { async run(action, body, userId) {
     if (!userId) throw fail('Please sign in first.', 401);
-    if (!await store.limit(`${userId}:all`, 240)) throw fail('Too many requests. Please wait a minute.', 429);
+    // Two devices may use the same account; allow both heartbeat/signaling loops.
+    if (!await store.limit(`${userId}:all`, 600)) throw fail('Too many requests. Please wait a minute.', 429);
     if (['create','join'].includes(action) && !await store.limit(`${userId}:${action}`,20)) throw fail('Too many attempts. Please wait a minute.',429);
+    // Room heartbeats can change its version while the TURN provider responds.
+    // Reuse this request's credentials on CAS retries, rather than calling TURN again.
+    let credentials;
+    const requestRtcConfig = () => credentials ||= Promise.resolve().then(rtcConfig);
     for (let attempt = 0; attempt < 8; attempt++) {
       const row = action === 'create' ? null : await store.load(body);
       const room = row?.data;
@@ -15,7 +20,7 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
         if (!member || member.userId !== userId) throw fail('You are not connected to this booth.',403);
       }
       const rooms = new Map(room ? [[room.code,room]] : []);
-      const service = createRoomService({ rooms, rtcConfig });
+      const service = createRoomService({ rooms, rtcConfig: requestRtcConfig });
       const result = await service.run(action, body, userId);
       const code = room?.code || result.code;
       const updated = rooms.get(code);

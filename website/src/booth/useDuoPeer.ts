@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { roomRequest } from './rooms';
 import type { RoomSession } from './rooms';
 import { sendSignal } from './signaling';
+import { connectionRetry } from './connectionRetry.mjs';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
 type Signal = { type: string; session: string; id?: string; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
@@ -164,8 +165,8 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         setDiagnostics(`Role: ${room.role}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
       }).catch(() => {});
     }, 2000);
-    void roomRequest<{ iceServers: RTCIceServer[]; relayConfigured: boolean }>('rtc', auth).then(result => {
-      if (stopped) return;
+    void connectionRetry(() => roomRequest<{ iceServers: RTCIceServer[]; relayConfigured: boolean }>('rtc', auth), () => stopped).then(result => {
+      if (stopped || !result) return;
       config = result; announce(); void poll();
     }).catch(report);
     const timeout = setTimeout(() => { if (!stopped && pc?.connectionState !== 'connected') setError(pc?.remoteDescription ? 'Both cameras exchanged their connection details, but the network has not connected them. Try Reconnect cameras. If this continues, open Connection details below so we can identify the blocked step.' : 'Camera connection details have not arrived yet. Keep both photo pages open and try Reconnect cameras.'); }, 25000);

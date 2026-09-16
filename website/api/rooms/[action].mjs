@@ -16,6 +16,7 @@ export default async function handler(req,res) {
     if(!jwt) return send(401,{error:'Please sign in first.'});
     const client = createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
     const {data,error} = await client.auth.getUser(jwt);
+    if(error && (!error.status || error.status >= 500)) return send(503,{error:'Account verification is temporarily unavailable. Please retry the connection.'});
     if(error || !data.user?.email_confirmed_at) return send(401,{error:'Please sign in with a verified account.'});
     let body=req.body;
     if(typeof body === 'string') { try {body=JSON.parse(body);} catch {return send(400,{error:'Invalid request.'});} }
