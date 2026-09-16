@@ -42,6 +42,11 @@ export function Account() {
     });
   }
   const update = recovery && Boolean(user);
+  let returnTo = '#booth';
+  try {
+    const saved = sessionStorage.getItem('together-after-signin');
+    if (saved === '#booth' || saved?.startsWith('#booth?')) returnTo = saved;
+  } catch { /* Default to a new booth if storage is unavailable. */ }
   return <section className="account-page" aria-labelledby="account-title">
     <div className="eyebrow">YOUR LITTLE PLACE AT TOGETHER</div>
     <h1 id="account-title">{update ? 'A fresh password.' : user ? 'Welcome back.' : mode === 'signup' ? 'Make yourself at home.' : mode === 'reset' ? 'Let’s get you back in.' : 'A little closer.'}</h1>
@@ -50,7 +55,7 @@ export function Account() {
       {loading ? <p role="status">Checking your account…</p> : !supabase ? <p role="alert">Account sign-in is not configured yet. Please try again later.</p> : user && !update ? <>
         <span className="eyebrow">SIGNED IN AS</span><p className="account-email">{user.email}</p>
         <Wallet key={user.id} userId={user.id} />
-        <a className="primary" href="#booth">Take the photos now</a>
+        <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional navigation hint. */ } }}>Take the photos now</a>
         <button className="text-button" disabled={busy} onClick={() => void run(async () => { const { error } = await supabase!.auth.signOut({ scope: 'local' }); if (error) setError('We couldn’t sign you out. Please try again.'); })}>Sign out</button>
       </> : <>
         {!update && mode !== 'reset' && <><button className="outline-button account-google" disabled={busy || !google} onClick={() => void run(async () => { const { error } = await supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: authRedirect() } }); if (error) setError('Google sign-in is unavailable. Please use email for now.'); })}>Continue with Google</button>{!google && <small>Google sign-in is coming soon. You can use email below.</small>}<div className="account-divider">or use your email</div></>}

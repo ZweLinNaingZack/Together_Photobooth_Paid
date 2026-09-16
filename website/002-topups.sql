@@ -4,7 +4,7 @@ create table public.together_topups (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.together_accounts(user_id),
   amount_mmk integer not null default 7000 check (amount_mmk = 7000),
-  points integer not null default 1000 check (points = 1000),
+  points integer not null default 100 check (points = 100),
   status text not null default 'draft' check (status in ('draft','pending','approved','rejected')),
   created_at timestamptz not null default now(),
   submitted_at timestamptz,
@@ -91,7 +91,7 @@ begin
    bank_reference = case when approve then ref else null end, review_note = nullif(trim(note),''),
    reviewed_at = now(), reviewed_by = auth.uid() where id = request_id returning * into item;
  if approve then
-   insert into public.together_credit_ledger(user_id,points,kind,reference) values(item.user_id,1000,'topup',item.id);
+   insert into public.together_credit_ledger(user_id,points,kind,reference) values(item.user_id,100,'topup',item.id);
  end if;
  return item;
 end; $$;

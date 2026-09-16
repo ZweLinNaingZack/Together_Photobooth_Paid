@@ -31,7 +31,7 @@ export function Wallet({ userId }: { userId: string }) {
       <p className="wallet-balance">{wallet.points.toLocaleString()} <span>points</span></p>
       <p>{wallet.trial_available ? '1 free session available' : 'Your free session has been used'}</p>
       <p>One session · 100 points</p>
-      <p>7,000 MMK · 1,000 points · 10 sessions</p>
+      <p>7,000 MMK · 100 points · 1 session</p>
       <button className="text-button" onClick={() => setAttempt(n => n + 1)}>Refresh balance</button>
       {wallet.is_admin && <p>Administrator account</p>}
       <h3>Recent point activity</h3>

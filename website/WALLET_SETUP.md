@@ -29,7 +29,7 @@ deduct credits with browser-side read/modify/write operations.
 
 ## Pricing agreed
 
-Currency MMK. One booth costs 100 points. Top-up: 7,000 MMK for 1,000 points.
+Currency MMK. One booth costs 100 points. Top-up: 7,000 MMK for 100 points.
 One free session per account, tracked separately from purchased points.
 For duo the creator pays; the guest is not charged.
 

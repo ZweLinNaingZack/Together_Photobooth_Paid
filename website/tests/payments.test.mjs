@@ -25,7 +25,7 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
         ('${admin}','zwelinnaing34@gmail.com',now()),
         ('${alice}','alice@example.test',now()),('${bob}','bob@example.test',now()),
         ('${unverified}','unverified@example.test',null);`);
-    for (const name of ['001-wallet-foundation.sql', '002-topups.sql']) {
+    for (const name of ['001-wallet-foundation.sql', '002-topups.sql', '003-correct-topup-pricing.sql']) {
       await db.exec(await readFile(new URL(`../${name}`, import.meta.url), 'utf8'));
     }
     async function as(id, role = 'authenticated') {
@@ -64,8 +64,8 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     await assert.rejects(() => review(second,true,'BANK123'), /unique constraint/);
     assert.equal((await db.query('select status from public.together_topups where id=$1',[second.id])).rows[0].status,'pending');
     await review(second,false,'','No matching incoming transaction');
-    await as(alice); assert.equal((await wallet()).points, 1000); assert.equal((await wallet()).history.length, 1);
-    await assert.rejects(() => db.exec("insert into public.together_credit_ledger(user_id,points,kind,reference) values ('"+alice+"',1000,'topup',gen_random_uuid())"), /permission denied/);
+    await as(alice); assert.equal((await wallet()).points, 100); assert.equal((await wallet()).history.length, 1);
+    await assert.rejects(() => db.exec("insert into public.together_credit_ledger(user_id,points,kind,reference) values ('"+alice+"',100,'topup',gen_random_uuid())"), /permission denied/);
     assert.equal((await db.query('select * from storage.objects')).rows.length, 1);
     // Uploaded receipt cannot be replaced after approval.
     assert.equal((await db.query("update storage.objects set name='changed' returning id")).rows.length, 0);

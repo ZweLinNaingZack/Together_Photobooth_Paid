@@ -6,8 +6,7 @@ const token = () => randomBytes(24).toString('hex');
 const layouts = new Set(['A','B','C','D','E','G','K','N']);
 const templates = new Set(['breaking-news','catch-yours','endless-moments','film-negative','movie-time','nutrition-label','red-music-player','story-today','ticket-memories']);
 function fail(message, status = 400) { return Object.assign(new Error(message), { status }); }
-export function createRoomService({ now = Date.now, rtcConfig = createTurnProvider() } = {}) {
-  const rooms = new Map(), limits = new Map();
+export function createRoomService({ now = Date.now, rtcConfig = createTurnProvider(), rooms = new Map(), limits = new Map() } = {}) {
   function state(room) {
     const hostOnline = now() - room.host.seen <= 15000, guestOnline = !!room.guest && now() - room.guest.seen <= 15000;
     if (!hostOnline) room.host.ready = false;

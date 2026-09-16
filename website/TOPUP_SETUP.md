@@ -1,10 +1,16 @@
 # Step 2: KBZPay top-ups and manual review
 
+Pricing correction: 7,000 MMK buys 100 points (one session). If step 2 is already
+installed, run only `003-correct-topup-pricing.sql`. For a fresh setup run 001,
+002, then 003 in order. The correction updates unapproved requests and future
+credits. Already approved credits are preserved, with their actual point amount
+shown in history; do not silently remove points from existing accounts.
+
 Run `002-topups.sql` once in Supabase SQL Editor, after the successful wallet
 migration. It creates a private receipt bucket and payment-request functions.
 Do not rerun `001-wallet-foundation.sql`. No server secrets are needed in the browser.
 
-Refresh My account. A 7,000 MMK package gives 1,000 points. The supplied QR is
+Refresh My account. A 7,000 MMK package gives 100 points. The supplied QR is
 copied unchanged to public/kbzpay-topup.png. Confirm it still scans in KBZPay
 and shows the intended recipient and 7,000 MMK before using real payments.
 
@@ -25,7 +31,7 @@ test account and distinguish test bank references from real references.
    clearly identified test reference. Enter the transaction reference, tick the
    verification box, and approve. The real customer's transfer reference must
    come from the bank, not solely the uploaded receipt.
-7. Return to the user's account and refresh balance: +1,000 points exactly once.
+7. Return to the user's account and refresh balance: +100 points exactly once.
    Retrying the same approval must not duplicate the credit.
 8. Try a second approval with the same bank reference: it must fail and leave
    that request pending with no extra points.
