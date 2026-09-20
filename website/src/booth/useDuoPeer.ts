@@ -15,6 +15,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
   const [phase, setPhase] = useState('Waiting for camera access');
   const [diagnostics, setDiagnostics] = useState('');
   const listener = useRef(onEvent); listener.current = onEvent;
+  const automaticRetries = useRef(0);
   const sender = useRef<(event: DuoEvent) => Promise<void>>(async () => { throw new Error('Your person is not connected yet.'); });
   useEffect(() => {
     if (!room || !stream) return;
@@ -26,6 +27,18 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     const incoming = new Map<string, { size: number; data: string }>();
     const acknowledgments = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
     let outgoing = Promise.resolve();
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = Date.now();
+    let connectedAfter: number | null = null;
+    const recover = () => {
+      if (stopped || recoveryTimer || automaticRetries.current >= 2) return;
+      recoveryTimer = setTimeout(() => {
+        recoveryTimer = undefined;
+        if (stopped || pc?.connectionState === 'connected') return;
+        automaticRetries.current++;
+        setAttempt(value => value + 1);
+      }, 3000);
+    };
     setRemote(null); setConnected(false); setError('');
     const report = (e: unknown) => { if (!stopped) setError(e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'); };
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
@@ -38,7 +51,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     }
     function attach(next: RTCDataChannel) {
       channel = next;
-      next.onopen = () => { if (!stopped && channel === next) { setConnected(true); setError(''); setPhase('Your cameras are connected'); } };
+      next.onopen = () => { if (!stopped && channel === next) { connectedAfter = Date.now() - startedAt; setConnected(true); setError(''); setPhase('Your cameras are connected'); } };
       next.onclose = () => { if (!stopped && channel === next) { setConnected(false); setError('Your person’s camera connection closed. Reconnect to continue.'); } };
       next.onmessage = event => {
         if (stopped || channel !== next || typeof event.data !== 'string' || event.data.length > 16000) return;
@@ -99,6 +112,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       next.onconnectionstatechange = () => {
         if (stopped || pc !== next) return;
         if (next.connectionState === 'failed' || next.connectionState === 'disconnected') { setConnected(false); setError(config?.relayConfigured ? 'The camera connection was interrupted. Try reconnecting your cameras.' : 'The cameras could not connect directly. This booth still needs a TURN relay for networks that block direct connections.'); }
+        if (next.connectionState === 'failed' || next.connectionState === 'disconnected') recover();
         if (next.connectionState === 'connected' && channel?.readyState === 'open') { setConnected(true); setError(''); }
       };
       next.oniceconnectionstatechange = () => {
@@ -111,21 +125,21 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     }
     async function receive(message: Signal) {
       if (message.type === 'hello' && room!.role === 'host' && guestId === message.session && pc?.signalingState === 'have-local-offer') {
-        await signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: pc.localDescription!.sdp } });
+        void signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: pc.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session === session && pc?.localDescription?.type === 'answer') {
-        await signal({ type: 'answer', session, description: { type: 'answer', sdp: pc.localDescription.sdp } });
+        void signal({ type: 'answer', session, description: { type: 'answer', sdp: pc.localDescription.sdp } }).catch(report);
       } else if (message.type === 'hello' && room!.role === 'host' && (guestId !== message.session || !pc?.localDescription)) {
         guestId = message.session;
         const next = createPeer(crypto.randomUUID()); attach(next.createDataChannel('together'));
         await next.setLocalDescription(await next.createOffer());
-        if (!stopped) await signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: next.localDescription!.sdp } });
+        if (!stopped) void signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: next.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session !== session && message.description?.type === 'offer') {
         const next = createPeer(message.session);
         await next.setRemoteDescription(message.description);
         for (const item of candidates.filter(item => item.session === session)) { try { await next.addIceCandidate(item.candidate); } catch (e) { report(e); } }
         candidates = [];
         await next.setLocalDescription(await next.createAnswer());
-        if (!stopped) await signal({ type: 'answer', session, description: { type: 'answer', sdp: next.localDescription!.sdp } });
+        if (!stopped) void signal({ type: 'answer', session, description: { type: 'answer', sdp: next.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'answer' && room!.role === 'host' && message.session === session && pc?.signalingState === 'have-local-offer' && message.description?.type === 'answer') {
         await pc.setRemoteDescription(message.description);
         for (const item of candidates.filter(item => item.session === session)) { try { await pc.addIceCandidate(item.candidate); } catch (e) { report(e); } }
@@ -139,18 +153,30 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       try {
         const result = await roomRequest<{ cursor: number; messages: { id: number; message: Signal }[] }>('signals', { ...auth, after: cursor });
         if (stopped) return;
+        // Reconnect starts at cursor zero. Negotiate only the newest camera
+        // greeting/offer, rather than rebuilding peers for every old attempt.
+        const latestHello = result.messages.filter(item => item.message.type === 'hello').at(-1);
+        const latestOffer = result.messages.filter(item => item.message.type === 'offer' && item.message.to === localId).at(-1);
         for (const item of result.messages) {
           if (stopped) return;
+          if (item.message.type === 'hello' && latestHello && item.id !== latestHello.id) continue;
+          if (item.message.type === 'offer' && latestOffer && item.id !== latestOffer.id) continue;
           // A bad or obsolete candidate must not block all later offers/answers.
           try { await receive(item.message); } catch (e) { report(e); }
           cursor = item.id;
         }
         cursor = result.cursor;
       } catch (e) { report(e); }
-      if (!stopped) timer = setTimeout(poll, 800);
+      if (!stopped) timer = setTimeout(poll, pc?.connectionState === 'connected' ? 2000 : 300);
     }
-    const announce = () => { if (!stopped && config && room.role === 'guest') void signal({ type: 'hello', session: localId }).catch(report); };
-    const helloTimer = setInterval(announce, 10000);
+    let announcing = false;
+    const announce = () => {
+      if (!stopped && config && room.role === 'guest' && pc?.connectionState !== 'connected' && !announcing) {
+        announcing = true;
+        void signal({ type: 'hello', session: localId }).catch(report).finally(() => { announcing = false; });
+      }
+    };
+    const helloTimer = setInterval(announce, 2000);
     const statsTimer = setInterval(() => {
       const active = pc;
       if (!active || stopped) { if (!stopped) setDiagnostics(`Role: ${room.role}\nSignaling: waiting for the other camera\nRelay configured: ${config ? config.relayConfigured ? 'yes' : 'no' : 'settings unavailable'}`); return; }
@@ -163,17 +189,22 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
           if (report.type === 'remote-candidate') remoteCandidates++;
         });
         // Intentionally exclude tokens, room codes, SDP, addresses and photos.
-        setDiagnostics(`Role: ${room.role}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
+        setDiagnostics(`Role: ${room.role}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
       }).catch(() => {});
     }, 2000);
     void connectionRetry(() => roomRequest<{ iceServers: RTCIceServer[]; relayConfigured: boolean }>('rtc', auth), () => stopped).then(result => {
       if (stopped || !result) return;
       config = result; announce(); void poll();
     }).catch(report);
-    const timeout = setTimeout(() => { if (!stopped && pc?.connectionState !== 'connected') setError(current => current || (pc?.remoteDescription ? 'Both cameras exchanged their connection details, but the network has not connected them. Try Reconnect cameras. If this continues, open Connection details below so we can identify the blocked step.' : 'Camera connection details have not arrived yet. Keep both photo pages open and try Reconnect cameras.')); }, 25000);
-    const hide = () => { stopped = true; clearTimeout(timer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
+    const timeout = setTimeout(() => {
+      if (!stopped && pc?.connectionState !== 'connected') {
+        setError(current => current || 'The camera handshake is taking longer than expected. Retrying the connection; keep both camera pages open.');
+        if (config) recover();
+      }
+    }, 25000);
+    const hide = () => { stopped = true; clearTimeout(recoveryTimer); clearTimeout(timer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
     window.addEventListener('pagehide', hide);
-    return () => { stopped = true; clearTimeout(timer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide); };
+    return () => { stopped = true; clearTimeout(recoveryTimer); clearTimeout(timer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide); };
   }, [room?.token, stream, attempt]);
-  return { remote, connected, error, phase, diagnostics, reconnect: () => setAttempt(value => value + 1), send: (event: DuoEvent) => sender.current(event) };
+  return { remote, connected, error, phase, diagnostics, reconnect: () => { automaticRetries.current = 0; setAttempt(value => value + 1); }, send: (event: DuoEvent) => sender.current(event) };
 }

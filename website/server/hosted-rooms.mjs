@@ -23,6 +23,9 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
       const rooms = new Map(room ? [[room.code,room]] : []);
       const service = createRoomService({ rooms, rtcConfig: requestRtcConfig });
       const result = await service.run(action, body, userId);
+      // The separate state heartbeat owns presence. Reading camera messages must
+      // not contend with offer/answer writes or invalidate their room version.
+      if (action === 'signals') return result;
       const code = room?.code || result.code;
       const updated = rooms.get(code);
       if (updated) {

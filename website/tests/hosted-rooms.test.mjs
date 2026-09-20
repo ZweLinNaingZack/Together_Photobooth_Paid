@@ -30,6 +30,13 @@ test('hosted rooms persist across instances, handle racing joins and protect mem
   await Promise.all([1,2].map(id=>run('signal',{code:host.code,token:host.token,message:{type:'hello',session:'test',id:String(id)}},'host')));
   const messages=await run('signals',{code:guest.code,token:guest.token,after:0},guestId);
   assert.equal(messages.messages.length,2);
+  const beforePolls = await store.load({code:host.code});
+  conflictingWrites = 100;
+  const reads = await Promise.all(Array.from({length:12},()=>run('signals',{code:guest.code,token:guest.token,after:0},guestId)));
+  assert.ok(reads.every(result=>result.messages.length===2));
+  assert.equal(conflictingWrites,100,'Polling must never try a competing room write');
+  assert.equal((await store.load({code:host.code})).version,beforePolls.version);
+  await assert.rejects(()=>run('signals',{code:host.code,token:host.token,after:0},'attacker'),/not connected/);
   conflictingWrites = 3; // Heartbeats race with the slow TURN request.
   const rtc=await run('rtc',{code:host.code,token:host.token},'host');
   assert.equal(turnCalls,1, 'Room version conflicts must not generate TURN credentials repeatedly');

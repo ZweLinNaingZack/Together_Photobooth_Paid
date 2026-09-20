@@ -9,8 +9,8 @@ function fail(message, status = 400) { return Object.assign(new Error(message), 
 export function createRoomService({ now = Date.now, rtcConfig = createTurnProvider(), rooms = new Map(), limits = new Map() } = {}) {
   function state(room) {
     const hostOnline = now() - room.host.seen <= 15000, guestOnline = !!room.guest && now() - room.guest.seen <= 15000;
-    if (!hostOnline) room.host.ready = false;
-    if (!guestOnline && room.guest) room.guest.ready = false;
+    // A delayed heartbeat is not a decision to leave readiness. Report presence
+    // separately so a temporary network pause can recover without another click.
     return { code: room.code, settings: room.settings, expiresAt: room.expires, host: { online: hostOnline, ready: room.host.ready }, guest: { online: guestOnline, ready: !!room.guest?.ready && guestOnline }, bothReady: hostOnline && guestOnline && room.host.ready && room.guest.ready };
   }
   return { run(action, body = {}, address = 'local') {
@@ -40,7 +40,7 @@ export function createRoomService({ now = Date.now, rtcConfig = createTurnProvid
     if (!room) throw fail('This booth has ended or expired. Create or join another booth.', 404);
     const role = typeof body.token !== 'string' ? null : room.host.token === body.token ? 'host' : room.guest?.token === body.token ? 'guest' : null;
     if (!role) throw fail('You are no longer connected to this booth. Please join again.', 403);
-    state(room); room[role].seen = now();
+    room[role].seen = now();
     if (action === 'rtc') {
       if (room.settings.source !== 'camera' || !state(room).bothReady) throw fail('Both people must be ready before connecting.', 409);
       const participant = room[role];

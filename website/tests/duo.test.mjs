@@ -5,6 +5,19 @@ import { captureSequence } from '../src/booth/capture.js';
 const settings = { layout: 'A', template: null, source: 'camera' };
 const auth = room => ({ code: room.code, token: room.token });
 
+test('delayed heartbeats recover readiness without requiring another ready click', () => {
+  let time = 0;
+  const service = createRoomService({now:()=>time});
+  const host = service.run('create',{settings}), guest = service.run('join',{code:host.code});
+  service.run('ready',{...auth(host),ready:true});
+  service.run('ready',{...auth(guest),ready:true});
+  time = 16000;
+  assert.equal(service.run('state',auth(host)).bothReady,false);
+  assert.equal(service.run('state',auth(guest)).bothReady,true);
+  service.run('ready',{...auth(guest),ready:false});
+  assert.equal(service.run('state',auth(host)).bothReady,false,'Explicit unready must still be respected');
+});
+
 test('signaling is private to room members and only returns the other participant’s messages', () => {
   const service = createRoomService();
   const host = service.run('create', { settings }), guest = service.run('join', { code: host.code });
