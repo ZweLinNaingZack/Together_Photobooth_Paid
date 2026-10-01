@@ -13,7 +13,9 @@ import { ScreenFlash, flashColors } from './ScreenFlash';
 import type { FlashColor } from './ScreenFlash';
 
 interface Props {
-  beforeReview: () => Promise<void>;
+  beforeReview: () => Promise<boolean>;
+  onPartnerConnection?: (connected: boolean | null) => void;
+  onPartnerExit?: () => void;
   room?: RoomSession | null; visible?: boolean;
   duoControl?: RefObject<((event: DuoEvent) => Promise<void>) | null>;
   onRemoteSession?: (index: number | null) => void;
@@ -45,6 +47,7 @@ export function SessionScreen(props: Props) {
   const remoteVideo = useRef<HTMLVideoElement>(null);
   const duo = !!props.room, guest = props.room?.role === 'guest';
   const peer = useDuoPeer(props.room || null, stream, event => {
+    if (event.type === 'leave') props.onPartnerExit?.();
     if (event.type === 'mirror' && typeof event.value === 'boolean') setRemoteMirror(event.value);
     if (event.type === 'paused' && typeof event.value === 'boolean') { setOtherPaused(event.value); if (event.value) stopCapture(); }
     if (!guest) return;
@@ -66,9 +69,11 @@ export function SessionScreen(props: Props) {
     if (reviewLock.current) return;
     reviewLock.current = true; setBusy(true);
     try {
-      await props.beforeReview();
+      if (!await props.beforeReview()) return;
       if (!alive.current) return;
-      if (duo) await peer.send({ type: 'edit' });
+      // Billing is committed at this point. A late disconnect must not strand
+      // the creator's paid photos; notify the guest again on reconnection.
+      if (duo && peer.connected) { try { await peer.send({ type: 'edit' }); } catch { /* The disconnect dialog handles the lost peer. */ } }
       props.onNext(!!stream);
     } catch (e) { if (alive.current) setMessage(e instanceof Error ? e.message : 'Please retry.'); }
     finally { reviewLock.current = false; if (alive.current) setBusy(false); }
@@ -115,9 +120,10 @@ export function SessionScreen(props: Props) {
   useEffect(() => { if (props.interrupted) stopCapture(); }, [props.interrupted]);
   useEffect(() => { if (duo && !props.room?.bothReady) stopCapture(); }, [duo, props.room?.bothReady]);
   useEffect(() => { share({ type: 'mirror', value: props.mirror }); }, [props.mirror, peer.connected]);
-  useEffect(() => { if (!guest && peer.connected) share({ type: 'photos', shots: card.shots }); }, [peer.connected]);
+  useEffect(() => { if (!guest && peer.connected) { share({ type: 'photos', shots: card.shots }); if (props.visible === false) share({type:'edit'}); } }, [peer.connected]);
   useEffect(() => { share({ type: 'paused', value: props.interrupted }); }, [props.interrupted, peer.connected]);
   useEffect(() => { if (duo && !peer.connected) { stopCapture(); setRemoteBusy(false); setRemoteReady(false); } else if (peer.connected) setRemoteReady((remoteVideo.current?.readyState || 0) >= 2); }, [peer.connected]);
+  useEffect(() => { props.onPartnerConnection?.(stream ? peer.connected : null); }, [peer.connected, stream, props.onPartnerConnection]);
   useEffect(() => { if (props.duoControl) props.duoControl.current = peer.send; return () => { if (props.duoControl) props.duoControl.current = null; }; });
   // Keep the data connection for shared retakes, but pause camera transmission in export.
   useEffect(() => { stream?.getVideoTracks().forEach(track => { track.enabled = props.visible !== false; }); }, [stream, props.visible]);
@@ -174,7 +180,7 @@ export function SessionScreen(props: Props) {
       </div>
       <ScreenFlash active={flashLit} color={props.flashColor} view={view} />
       <p id="camera-message" className="session-note" role="status">{message || (duo ? peer.connected ? 'Both cameras are connected. The creator takes each photo and shares it with both of you.' : `${peer.phase}. Your microphone stays off.` : 'Your photos stay in this browser tab.')}</p>
-      {duo && peer.error && <div className="camera-connection-error" role="alert"><p>{peer.error}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>Reconnect cameras</button></div>}
+      {duo && peer.error && <details className="connection-details"><summary>Camera connection options</summary><p>{peer.error}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>Reconnect cameras</button></details>}
       {duo && !peer.connected && peer.diagnostics && <details className="connection-details"><summary>Connection details</summary><p>These details help troubleshoot the connection. They contain no photos or invitation codes.</p><pre>{peer.diagnostics}</pre></details>}
       {guest && <p className="session-note">Your creator controls the countdown, retakes, and photo order. Each shared photo appears below.</p>}
       <div className="capture-settings" hidden={guest}><fieldset disabled={locked}><legend>HOW SHALL WE TAKE THEM?</legend>{(['timer', 'manual'] as const).map(value => <label key={value}><input type="radio" name="capture-method" value={value} checked={method === value} onChange={() => { props.onMethod(value); setStatus(''); }} /> {value === 'timer' ? 'With a timer' : 'Manual click'}</label>)}</fieldset><label className="timer-setting" hidden={method === 'manual'}>COUNTDOWN<select id="timer-seconds" value={seconds} disabled={locked} onChange={e => { props.onSeconds(Number(e.target.value)); setStatus(''); }}>{[3, 5, 7].map(value => <option key={value} value={value}>{value} seconds</option>)}</select></label></div>
@@ -184,7 +190,7 @@ export function SessionScreen(props: Props) {
         {props.flash && <p className="flash-note">Your screen lights up just before each photo. Keep your screen bright and your face close for more light.</p>}
       </div>
       <p id="session-status" aria-live="polite">{guest ? remoteBusy ? 'Your creator is taking your shared photos…' : complete ? 'Your photos are ready. Your creator can take you both to export.' : 'Ready when your creator is.' : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
-<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{guest ? 'Leave session' : 'Change design'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? `Retake photo ${retake + 1}` : method === 'manual' ? 'Take a photo' : ready ? 'Continue countdown' : 'Start the countdown'} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>Stop countdown</button><button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null || (duo && !peer.connected)} onClick={review}>Make it yours</button></div>
+<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{duo ? 'Leave session' : 'Change layout'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? `Retake photo ${retake + 1}` : method === 'manual' ? 'Take a photo' : ready ? 'Continue countdown' : 'Start the countdown'} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>Stop countdown</button><button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null} onClick={review}>Continue to editing</button></div>
       {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={takeShot} retake={retake} />}
       <PhotoTray shots={card.shots} count={layout.count} retake={retake} disabled={locked || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
     </div>

@@ -79,7 +79,7 @@ export function DuoUploadScreen({ card, photos, onPhotos, onBack, onNext }: {
             <PhotoTray shots={photos.slice(offset, offset + count)} count={count} retake={null} actionLabel="Replace" onMove={(from, to) => updateSide(side, move(photos.slice(offset, offset + count), from, to))} onRetake={() => setStage(side)} />
           </section>;
         })}
-        <div className="step-actions"><button className="text-button" onClick={onBack}>Change design</button><button className="primary" disabled={!preview || pairs.length !== count} onClick={() => onNext(pairs)}>Continue to filters & export</button></div>
+        <div className="step-actions"><button className="text-button" onClick={onBack}>Change layout</button><button className="primary" disabled={!preview || pairs.length !== count} onClick={() => onNext(pairs)}>Continue to editing</button></div>
       </div>
     </>}
   </>;

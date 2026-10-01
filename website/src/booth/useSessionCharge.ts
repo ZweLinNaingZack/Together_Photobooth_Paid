@@ -6,12 +6,15 @@ export function useSessionCharge() {
   const pending = useRef<Promise<void> | null>(null);
   const reservePending = useRef<Promise<void> | null>(null), generation = useRef(0);
   const settled = useRef(false);
+  const costRef = useRef<number | null>(null);
+  const [cost, setCost] = useState<number | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [receipt, setReceipt] = useState('');
   function reset() {
     void supabase?.rpc('together_session_action', { request_id: id.current, operation: 'release' }).then(() => {}, () => {});
     generation.current++; reservePending.current = null;
     id.current = crypto.randomUUID(); pending.current = null; settled.current = false;
     setBusy(false); setError(''); setReceipt('');
+    costRef.current = null; setCost(null);
   }
   useEffect(() => () => { generation.current++; void supabase?.rpc('together_session_action', { request_id: id.current, operation: 'release' }).then(() => {}, () => {}); }, []);
   function reserve(roomCode: string | null = null): Promise<void> {
@@ -29,6 +32,7 @@ export function useSessionCharge() {
           throw new Error('This session has ended.');
         }
         id.current = data.session_id; settled.current = data.completed;
+        costRef.current = data.used_trial ? 0 : 100; setCost(costRef.current);
       } catch (e) { if (version === generation.current) setError(e instanceof Error ? e.message : 'Please retry authorization.'); throw e; }
       finally { if (version === generation.current) { reservePending.current = null; if (!pending.current) setBusy(false); } }
     })();
@@ -42,7 +46,9 @@ export function useSessionCharge() {
     const task = (async () => {
       try {
         if (!supabase) throw new Error('Please sign in to complete your session.');
+        const confirmedCost = costRef.current;
         await reserve(roomCode);
+        if (!settled.current && confirmedCost !== costRef.current) throw new Error('Your session price changed. Please review the updated amount and confirm again.');
         if (version !== generation.current) throw new Error('This session has ended.');
         const { data, error } = await supabase.rpc('together_complete_session', { request_id: id.current, room_code: roomCode });
         if (error) throw new Error(error.code === 'PGRST202' ? 'Session billing is not available yet. Please contact the administrator.' : error.code === 'P0001' || error.code === '42501' ? error.message : 'We could not confirm your session. Retry safely; you will not be charged twice.');
@@ -58,5 +64,5 @@ export function useSessionCharge() {
     pending.current = task;
     return task;
   }
-  return { complete, reserve, reset, busy, error, receipt };
+  return { complete, reserve, reset, busy, error, receipt, cost };
 }

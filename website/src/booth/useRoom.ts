@@ -4,9 +4,10 @@ import type { RoomSession, RoomSettings, RoomState } from './rooms';
 
 export function useRoom() {
   const [room, setRoom] = useState<RoomSession | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [ended, setEnded] = useState(false);
   const current = useRef<RoomSession | null>(null), generation = useRef(0), lock = useRef(false), revision = useRef(0);
   function save(value: RoomSession | null) { current.current = value; setRoom(value); }
-  function end() { generation.current++; revision.current++; lock.current = false; if (current.current) leaveRoom(current.current); save(null); setBusy(false); setError(''); }
+  function end() { generation.current++; revision.current++; lock.current = false; if (current.current) leaveRoom(current.current); save(null); setBusy(false); setError(''); setEnded(false); }
   useEffect(() => {
     const hide = () => end();
     window.addEventListener('pagehide', hide);
@@ -14,7 +15,7 @@ export function useRoom() {
   }, []);
   async function enter(action: 'create' | 'join', body: object) {
     if (lock.current) return null;
-    lock.current = true; setBusy(true); setError(''); const id = ++generation.current;
+    lock.current = true; setBusy(true); setError(''); setEnded(false); const id = ++generation.current;
     try {
       const result = await roomRequest<RoomSession>(action, body);
       if (id !== generation.current) { leaveRoom(result); return null; }
@@ -34,6 +35,7 @@ export function useRoom() {
           if (!stopped && current.current?.token === session.token && version === revision.current) { save({ ...session, ...next }); setError(''); }
         } catch (e) { if (!stopped && version === revision.current && current.current?.token === session.token) {
           if (e instanceof RoomRequestError && [401,403,404].includes(e.status)) save({ ...current.current, bothReady: false });
+          if (e instanceof RoomRequestError && e.status === 404) setEnded(true);
           setError(e instanceof Error ? e.message : 'Connection interrupted. Reconnecting…');
         } }
       }
@@ -52,5 +54,5 @@ export function useRoom() {
     } catch (e) { if (id === generation.current) { setError(e instanceof Error ? e.message : 'Could not update readiness.'); } return null; }
     finally { if (id === generation.current) { lock.current = false; setBusy(false); } }
   }
-  return { room, busy, error, end, create: (settings: RoomSettings) => enter('create', { settings }), join: (code: string, invite: string | null) => enter('join', invite ? { invite } : { code }), ready: (value: boolean) => update(value), check: () => update() };
+  return { room, busy, error, ended, end, create: (settings: RoomSettings) => enter('create', { settings }), join: (code: string, invite: string | null) => enter('join', invite ? { invite } : { code }), ready: (value: boolean) => update(value), check: () => update() };
 }

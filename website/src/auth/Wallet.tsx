@@ -30,7 +30,7 @@ export function Wallet({ userId, page = 'overview' }: { userId: string; page?: '
       <nav className="account-tabs" aria-label="Account pages"><a href="#account" aria-current={page === 'overview' ? 'page' : undefined}>Overview</a><a href="#account/buy" aria-current={page === 'buy' ? 'page' : undefined}>Buy points</a>{wallet.is_admin && <a href="#account/admin" aria-current={page === 'admin' ? 'page' : undefined}>Admin reviews</a>}</nav>
       {page === 'overview' && <div className="wallet-grid"><section className="dashboard-card balance-card"><span className="eyebrow">YOUR BALANCE</span><p className="wallet-balance">{wallet.points.toLocaleString()} <span>points</span></p><p>100 points for one session.</p><a className="primary" href="#account/buy">Buy points</a></section><section className="dashboard-card"><span className="eyebrow">YOUR FIRST MEMORY</span><p className="wallet-balance">{wallet.trial_available ? '01' : '00'} <span>free session</span></p>
       <p>{wallet.trial_reserved ? 'Your free session is reserved for an active booth' : wallet.trial_available ? '1 free session available' : 'Your free session has been used'}</p>
-      {!!wallet.reserved_points && <p>{wallet.reserved_points} points are reserved for your active booth and deducted on completion.</p>}
+      {!!wallet.reserved_points && <p>{wallet.reserved_points} points are reserved for your active booth and deducted only when you confirm editing.</p>}
       <p>Your free session is used before your points.</p></section><section className="dashboard-card activity-card"><div className="section-heading"><h2>Recent activity</h2>
       <button className="text-button" onClick={() => setAttempt(n => n + 1)}>Refresh balance</button>
       </div>
