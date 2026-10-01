@@ -4,6 +4,7 @@ import { layouts, filters, move, replaceShot, captureTargets, filterPixels } fro
 import { captureSequence } from '../src/booth/capture.js';
 import { cardDesigns } from '../src/booth/designs.ts';
 import { renderCard, cardDimensions } from '../src/booth/renderCard.js';
+import { musicTitles } from '../src/booth/musicTitle.js';
 
 test('layout slots, capture counts and captions stay within their cards', () => {
   const separated = (a, b) => a.x + a.w <= b.x + 1e-9 || b.x + b.w <= a.x + 1e-9 || a.y + a.h <= b.y + 1e-9 || b.y + b.h <= a.y + 1e-9;
@@ -73,7 +74,7 @@ test('all custom exports fill the canvas and draw the correct photo count', asyn
   globalThis.Image = class { naturalWidth = 1440; naturalHeight = 960; set src(value) { this.source = value; queueMicrotask(() => this.onload()); } };
   globalThis.document = { fonts: { ready: Promise.resolve() }, createElement() {
     const calls = [], canvas = { width: 0, height: 0, calls, getContext: () => context };
-    const context = { drawImage: (...args) => calls.push(args), fillRect() {}, save() {}, translate() {}, rotate() {}, restore() {}, beginPath() {}, roundRect() {}, clip() {}, moveTo() {}, lineTo() {}, closePath() {}, putImageData() {}, getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }) };
+    const context = { scale() {}, measureText: text => ({width:text.length*12}), fillText() {}, drawImage: (...args) => calls.push(args), fillRect() {}, save() {}, translate() {}, rotate() {}, restore() {}, beginPath() {}, roundRect() {}, clip() {}, moveTo() {}, lineTo() {}, closePath() {}, putImageData() {}, getImageData: (_x, _y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }) };
     canvases.push(canvas); return canvas;
   } };
   try {
@@ -84,8 +85,8 @@ test('all custom exports fill the canvas and draw the correct photo count', asyn
       const expectedWidth = Math.max(layouts[design.layout || 'A'].width, Math.round(design.crop[2]));
       assert.equal(canvas.width, expectedWidth); assert.equal(canvas.height, Math.round(expectedWidth * design.crop[3] / design.crop[2]));
       assert.deepEqual(canvas.calls[0].slice(1), [...design.crop, 0, 0, canvas.width, canvas.height]);
-      assert.equal(canvas.calls.length, design.slots.length + 1, `${template} must draw artwork and three photos`);
-      for (const call of canvas.calls.slice(1)) {
+      assert.equal(canvas.calls.length, design.slots.length + 1 + (musicTitles[template] ? 1 : 0), `${template} draws artwork, photos, and optional title background`);
+      for (const call of canvas.calls.slice(1, design.slots.length + 1)) {
         const [, x, y, w, h] = call;
         assert(x >= 0 && y >= 0 && x + w <= canvas.width + 1 && y + h <= canvas.height + 1);
       }

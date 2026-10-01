@@ -22,6 +22,7 @@ import { useRoom } from './useRoom';
 import type { DuoEvent } from './useDuoPeer';
 import { useSessionCharge } from './useSessionCharge';
 import './journey.css';
+import { prefetchFrames } from './frameAssets';
 
 const progress: [Step, string][] = [['mode', 'Solo or duo'], ['source', 'Photo source'], ['layout', 'Your layout'], ['session', 'Your photos'], ['design', 'Frame & filter'], ['export', 'Export & download']];
 
@@ -35,6 +36,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const [source, setSource] = useState<'camera' | 'upload'>('camera');
   const [mode, setMode] = useState<BoothMode>('solo');
   const [step, setStep] = useState<Step>('mode');
+  useEffect(() => { if (active && (step === 'session' || step === 'upload')) return prefetchFrames(card.layout); }, [active, step, card.layout]);
   const [instructions, setInstructions] = useState(false);
   const [retake, setRetake] = useState<number | null>(null);
   const [method, setMethod] = useState<'manual' | 'timer'>('timer'), [seconds, setSeconds] = useState(3);

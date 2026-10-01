@@ -8,5 +8,6 @@ export interface CardState {
   filter: string;
   color: string;
   caption: string;
+  trackTitle?: string;
   design: string;
 }

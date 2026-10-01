@@ -30,6 +30,7 @@ function harness({cost=100,role='host'}={}) {
     if(name==='react')return react;
     if(name==='react/jsx-runtime')return{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'Fragment'};
     if(name==='./core')return core;
+    if(name==='./frameAssets')return{prefetchFrames:()=>()=>{}};
     if(name==='./useRoom')return{useRoom:()=>party};
     if(name==='./useSessionCharge')return{useSessionCharge:()=>charge};
     if(name==='./editingConfirmation.mjs')return{createEditingConfirmation};
