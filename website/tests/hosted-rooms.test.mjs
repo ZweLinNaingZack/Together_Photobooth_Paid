@@ -40,9 +40,12 @@ test('hosted rooms persist across instances, handle racing joins and protect mem
   conflictingWrites = 3; // Heartbeats race with the slow TURN request.
   const rtc=await run('rtc',{code:host.code,token:host.token},'host');
   assert.equal(turnCalls,1, 'Room version conflicts must not generate TURN credentials repeatedly');
+  assert.equal(conflictingWrites,3,'TURN setup must not wait for any competing room write');
+  assert.match(rtc.signalTopic,/^booth:/);
   assert.equal(rtc.relayConfigured,true);
   assert.deepEqual(await run('rtc',{code:host.code,token:host.token},'host'),rtc);
-  assert.equal(turnCalls,1, 'Persisted TURN credentials survive later server instances');
+  assert.equal(turnCalls,2, 'Each API request issues credentials without writing room state; the browser caches them');
+  conflictingWrites = 0;
   await run('leave',{code:host.code,token:host.token},'host');
   await assert.rejects(()=>run('state',{code:guest.code,token:guest.token},guestId),/expired/);
   await db.exec('set role authenticated');

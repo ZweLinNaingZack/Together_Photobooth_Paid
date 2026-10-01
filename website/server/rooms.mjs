@@ -33,7 +33,7 @@ export function createRoomService({ now = Date.now, rtcConfig = createTurnProvid
       const room = typeof body.invite === 'string' ? [...rooms.values()].find(r => r.invite === body.invite) : rooms.get(String(body.code || '').trim().toUpperCase());
       if (!room) throw fail('That booth was not found or has expired. Check the code with your person.', 404);
       if (room.guest && now() - room.guest.seen <= 60000) throw fail('This booth already has two people.', 409);
-      room.host.ready = false; room.signals = []; room.guest = { token: token(), ready: false, seen: now() };
+      room.host.ready = false; room.signals = []; room.signalTopic = `booth:${token()}`; room.guest = { token: token(), ready: false, seen: now() };
       return { ...state(room), token: room.guest.token, role: 'guest' };
     }
     const room = rooms.get(body.code);

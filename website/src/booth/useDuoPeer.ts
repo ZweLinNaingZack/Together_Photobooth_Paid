@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { roomRequest } from './rooms';
 import type { RoomSession } from './rooms';
-import { createSignalQueue } from './signaling';
+import { createCameraTransport } from './cameraTransport.mjs';
 import { connectionRetry } from './connectionRetry.mjs';
+import { supabase } from '../auth/client';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
-type Signal = { type: string; session: string; id?: string; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+type RtcConfig = { iceServers: RTCIceServer[]; relayConfigured: boolean; signalTopic?: string };
 
 // Signaling uses the room API; camera tracks and photos use encrypted WebRTC.
 export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null, onEvent: (event: DuoEvent) => void) {
@@ -16,12 +18,27 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
   const [diagnostics, setDiagnostics] = useState('');
   const listener = useRef(onEvent); listener.current = onEvent;
   const automaticRetries = useRef(0);
+  const preparation = useRef<{ token: string; promise: Promise<RtcConfig | undefined> } | null>(null);
+  // Fetch relay credentials while getUserMedia is asking permission/starting,
+  // rather than adding the server round trips after the camera is available.
+  useEffect(() => {
+    if (!room) return;
+    let cancelled = false;
+    automaticRetries.current = 0;
+    const entry = { token: room.token, promise: connectionRetry(() => roomRequest<RtcConfig>('rtc', { code: room.code, token: room.token }), () => cancelled) };
+    preparation.current = entry;
+    void entry.promise.catch(() => { if (preparation.current === entry) preparation.current = null; });
+    return () => { cancelled = true; if (preparation.current === entry) preparation.current = null; };
+  }, [room?.token]);
   const sender = useRef<(event: DuoEvent) => Promise<void>>(async () => { throw new Error('Your person is not connected yet.'); });
   useEffect(() => {
     if (!room || !stream) return;
-    let stopped = false, cursor = 0, timer: ReturnType<typeof setTimeout>, pc: RTCPeerConnection | null = null;
+    let stopped = false, pc: RTCPeerConnection | null = null;
     let channel: RTCDataChannel | null = null, session = '', guestId = '';
-    let config: { iceServers: RTCIceServer[]; relayConfigured: boolean } | null = null;
+    let config: RtcConfig | null = null;
+    let transport: ReturnType<typeof createCameraTransport> | null = null;
+    let transportName = 'Preparing connection', receiving = Promise.resolve();
+    let guestGeneration = 0, offerGeneration = 0, negotiationGeneration = 0;
     let candidates: { session: string; candidate: RTCIceCandidateInit }[] = [];
     const localId = crypto.randomUUID(), auth = { code: room.code, token: room.token };
     const incoming = new Map<string, { size: number; data: string }>();
@@ -42,8 +59,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     setRemote(null); setConnected(false); setError('');
     const report = (e: unknown) => { if (!stopped) setError(e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'); };
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
-    const enqueueSignal = createSignalQueue((messages: Signal[]) => roomRequest('signal', { ...auth, messages }), () => stopped, true);
-    const signal = (message: Signal) => enqueueSignal({ ...message, id: crypto.randomUUID() });
+    const signal = (message: Signal) => transport?.send({ ...message, generation: message.type === 'hello' ? startedAt : negotiationGeneration, id: crypto.randomUUID() }) ?? Promise.resolve();
     function closePeer() {
       channel?.close(); pc?.close(); channel = null; pc = null; incoming.clear();
       for (const waiter of acknowledgments.values()) waiter.reject(new Error('Camera connection closed.'));
@@ -102,10 +118,13 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       return task;
     };
     function createPeer(id: string) {
-      closePeer(); session = id;
+      closePeer(); session = id; negotiationGeneration = Date.now();
       setPhase('Finding a route between your cameras');
       if (!config) throw new Error('Camera connection settings are still loading.');
-      const next = new RTCPeerConnection({ iceServers: config.iceServers }); pc = next;
+      const next = new RTCPeerConnection({ iceServers: config.iceServers,
+        // After a failed direct attempt, use the configured relay explicitly.
+        iceTransportPolicy: automaticRetries.current > 0 && config.relayConfigured ? 'relay' : 'all',
+      }); pc = next;
       stream!.getTracks().forEach(track => next.addTrack(track, stream!));
       next.ontrack = event => { if (!stopped && pc === next) setRemote(event.streams[0] || new MediaStream([event.track])); };
       next.onicecandidate = event => { if (!stopped && pc === next && event.candidate) void signal({ type: 'candidate', session: id, candidate: event.candidate.toJSON() }).catch(report); };
@@ -124,6 +143,19 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       return next;
     }
     async function receive(message: Signal) {
+      if (stopped) return;
+      // HTTP fallback can arrive after newer WebSocket messages. An older
+      // negotiation must never tear down the current peer.
+      if (message.type === 'hello' && room!.role === 'host') {
+        const generation = message.generation || 0;
+        if (generation < guestGeneration) return;
+        guestGeneration = generation;
+      }
+      if (message.type === 'offer' && room!.role === 'guest' && message.to === localId) {
+        const generation = message.generation || 0;
+        if (generation < offerGeneration) return;
+        offerGeneration = generation;
+      }
       if (message.type === 'hello' && room!.role === 'host' && guestId === message.session && pc?.signalingState === 'have-local-offer') {
         void signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: pc.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session === session && pc?.localDescription?.type === 'answer') {
@@ -135,6 +167,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         if (!stopped) void signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: next.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session !== session && message.description?.type === 'offer') {
         const next = createPeer(message.session);
+        negotiationGeneration = message.generation || negotiationGeneration;
         await next.setRemoteDescription(message.description);
         for (const item of candidates.filter(item => item.session === session)) { try { await next.addIceCandidate(item.candidate); } catch (e) { report(e); } }
         candidates = [];
@@ -145,29 +178,10 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         for (const item of candidates.filter(item => item.session === session)) { try { await pc.addIceCandidate(item.candidate); } catch (e) { report(e); } }
         candidates = [];
       } else if (message.type === 'candidate' && message.candidate) {
+        if (typeof message.generation === 'number' && message.generation < negotiationGeneration) return;
         if (message.session === session && pc?.remoteDescription) await pc.addIceCandidate(message.candidate);
         else if (candidates.length < 128) candidates.push({ session: message.session, candidate: message.candidate });
       }
-    }
-    async function poll() {
-      try {
-        const result = await roomRequest<{ cursor: number; messages: { id: number; message: Signal }[] }>('signals', { ...auth, after: cursor });
-        if (stopped) return;
-        // Reconnect starts at cursor zero. Negotiate only the newest camera
-        // greeting/offer, rather than rebuilding peers for every old attempt.
-        const latestHello = result.messages.filter(item => item.message.type === 'hello').at(-1);
-        const latestOffer = result.messages.filter(item => item.message.type === 'offer' && item.message.to === localId).at(-1);
-        for (const item of result.messages) {
-          if (stopped) return;
-          if (item.message.type === 'hello' && latestHello && item.id !== latestHello.id) continue;
-          if (item.message.type === 'offer' && latestOffer && item.id !== latestOffer.id) continue;
-          // A bad or obsolete candidate must not block all later offers/answers.
-          try { await receive(item.message); } catch (e) { report(e); }
-          cursor = item.id;
-        }
-        cursor = result.cursor;
-      } catch (e) { report(e); }
-      if (!stopped) timer = setTimeout(poll, pc?.connectionState === 'connected' ? 2000 : 300);
     }
     let announcing = false;
     const announce = () => {
@@ -179,22 +193,41 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     const helloTimer = setInterval(announce, 2000);
     const statsTimer = setInterval(() => {
       const active = pc;
-      if (!active || stopped) { if (!stopped) setDiagnostics(`Role: ${room.role}\nSignaling: waiting for the other camera\nRelay configured: ${config ? config.relayConfigured ? 'yes' : 'no' : 'settings unavailable'}`); return; }
+      if (!active || stopped) { if (!stopped) setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nSignaling: waiting for the other camera\nRelay configured: ${config ? config.relayConfigured ? 'yes' : 'no' : 'settings unavailable'}`); return; }
       void active.getStats().then(stats => {
         if (stopped || pc !== active) return;
         let receivedFrames = 0, localCandidates = 0, remoteCandidates = 0;
+        let route = 'Not selected', roundTrip = 'Not available';
         stats.forEach(report => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') receivedFrames += report.framesDecoded || 0;
           if (report.type === 'local-candidate') localCandidates++;
           if (report.type === 'remote-candidate') remoteCandidates++;
+          if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
+            const local = stats.get(report.localCandidateId), other = stats.get(report.remoteCandidateId);
+            route = `${local?.candidateType || '?'} → ${other?.candidateType || '?'} (${local?.protocol || '?'})`;
+            if (typeof report.currentRoundTripTime === 'number') roundTrip = `${Math.round(report.currentRoundTripTime * 1000)} ms`;
+          }
         });
         // Intentionally exclude tokens, room codes, SDP, addresses and photos.
-        setDiagnostics(`Role: ${room.role}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
+        setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nSelected route: ${route}\nNetwork round trip: ${roundTrip}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
       }).catch(() => {});
     }, 2000);
-    void connectionRetry(() => roomRequest<{ iceServers: RTCIceServer[]; relayConfigured: boolean }>('rtc', auth), () => stopped).then(result => {
+    const configPromise = preparation.current?.token === room.token ? preparation.current.promise : connectionRetry(() => roomRequest<RtcConfig>('rtc', auth), () => stopped);
+    void configPromise.then(result => {
       if (stopped || !result) return;
-      config = result; announce(); void poll();
+      config = result;
+      transport = createCameraTransport({ client: supabase, topic: result.signalTopic, role: room.role,
+        request: (action: string, body: object) => roomRequest(action, { ...auth, ...body }),
+        onMessage: (message: Signal) => { receiving = receiving.then(() => receive(message)).catch(report); },
+        onStatus: (status: string) => {
+          transportName = status;
+          // The first HTTP greeting may still be pending. Do not let that slow
+          // request prevent immediate negotiation when the socket opens.
+          if (status === 'Private WebSocket' && room.role === 'guest' && pc?.connectionState !== 'connected') void signal({type:'hello',session:localId}).catch(report);
+        },
+        onError: report, connected: () => pc?.connectionState === 'connected',
+      });
+      announce();
     }).catch(report);
     const timeout = setTimeout(() => {
       if (!stopped && pc?.connectionState !== 'connected') {
@@ -202,9 +235,9 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         if (config) recover();
       }
     }, 25000);
-    const hide = () => { stopped = true; clearTimeout(recoveryTimer); clearTimeout(timer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
+    const hide = () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
     window.addEventListener('pagehide', hide);
-    return () => { stopped = true; clearTimeout(recoveryTimer); clearTimeout(timer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide); };
+    return () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide); };
   }, [room?.token, stream, attempt]);
   return { remote, connected, error, phase, diagnostics, reconnect: () => { automaticRetries.current = 0; setAttempt(value => value + 1); }, send: (event: DuoEvent) => sender.current(event) };
 }
