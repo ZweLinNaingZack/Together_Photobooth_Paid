@@ -16,10 +16,11 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
   const [mode, setMode] = useState<Mode>('signin'), [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [google, setGoogle] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('');
   const lock = useRef(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [captchaToken, setCaptchaToken] = useState(''), [captchaAttempt, setCaptchaAttempt] = useState(0);
   useEffect(() => { const c = new AbortController(); googleAvailable(c.signal).then(setGoogle).catch(() => {}); return () => c.abort(); }, []);
-  useEffect(() => { setPassword(''); }, [user?.id, recovery]);
-  function switchMode(next: Mode) { setMode(next); setPassword(''); setMessage(''); setError(''); }
+  useEffect(() => { setPassword(''); setShowPassword(false); }, [user?.id, recovery]);
+  function switchMode(next: Mode) { setMode(next); setPassword(''); setShowPassword(false); setMessage(''); setError(''); }
   async function run(task: () => Promise<void>) {
     if (lock.current) return; lock.current = true; setBusy(true); setError(''); setMessage('');
     try { await task(); } catch { setError('We could not connect. Please check your connection and try again.'); }
@@ -68,7 +69,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
         {!update && mode !== 'reset' && <><button className="outline-button account-google" disabled={busy || !google} onClick={() => void run(async () => { const { error } = await supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: authRedirect() } }); if (error) setError('Google sign-in is unavailable. Please use email for now.'); })}>Continue with Google</button>{!google && <small>Google sign-in is coming soon. You can use email below.</small>}<div className="account-divider">or use your email</div></>}
         <form onSubmit={submit}><fieldset disabled={busy}>
           {!update && <label>Email address<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required maxLength={254} /></label>}
-          {(update || mode !== 'reset') && <label>{update ? 'New password' : 'Password'}<input type="password" autoComplete={update || mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={update || mode === 'signup' ? 8 : 1} maxLength={128} />{(update || mode === 'signup') && <small>Use at least 8 characters.</small>}</label>}
+          {(update || mode !== 'reset') && <div className="password-field"><label htmlFor="account-password">{update ? 'New password' : 'Password'}</label><div className="password-input"><input id="account-password" type={showPassword ? 'text' : 'password'} autoComplete={update || mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} required minLength={update || mode === 'signup' ? 8 : 1} maxLength={128} /><button type="button" className="password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-controls="account-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{showPassword && <path d="m3 3 18 18" />}</svg></button></div>{(update || mode === 'signup') && <small>Use at least 8 characters.</small>}</div>}
           {!update && <Captcha key={`${mode}-${captchaAttempt}`} onToken={setCaptchaToken} />}
           {!emailFlows && !update && <p className="account-message">Gmail and password sign-in is available for confirmed accounts. New email registrations and password-reset emails are paused while we prepare email delivery. New here? Continue with Google above.</p>}
           <button className="primary" type="submit" disabled={!update && (!captchaToken || mode !== 'signin' && !emailFlows)}>{busy ? 'Just a moment…' : update ? 'Save new password' : mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}</button>
