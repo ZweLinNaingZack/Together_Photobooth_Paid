@@ -57,6 +57,17 @@ function harness({cost=100,role='host',invite=null}={}) {
   return {find,render,flush,start,party,charge,leaveGuard,debits:()=>debits,commit:()=>commit?.()};
 }
 
+test('insufficient points show a popup and never open capture or debit',async()=>{
+  const ui=harness();
+  ui.charge.reserve=async()=>{ui.charge.error='You need 100 points to continue.';throw new Error(ui.charge.error);};
+  await ui.start('solo','camera');
+  const warning=ui.find('WarningNotice',p=>p.title==='Before you continue');
+  assert.ok(warning);
+  assert.equal(warning.children[0].props.children,'You need 100 points to continue.');
+  assert.equal(ui.find('SessionScreen'),undefined);
+  assert.equal(ui.debits(),0);
+});
+
 test('authenticated invite opens the waiting room without choosing a mode or charging the guest',async()=>{
  const ui=harness({role:'guest',invite:'invitation-token'});let received;
  const join=ui.party.join.bind(ui.party);ui.party.join=async(code,invite)=>{received=invite;return join(code);};

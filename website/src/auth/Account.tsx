@@ -1,3 +1,4 @@
+import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from './AuthProvider';
@@ -58,7 +59,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
     <h1 id="account-title">{update ? 'A fresh password.' : user ? 'Welcome back.' : mode === 'signup' ? 'Make yourself at home.' : mode === 'reset' ? 'Let’s get you back in.' : 'A little closer.'}</h1>
     <p className="account-intro">{user ? 'Your account, ready for your next little moment.' : 'One account for the moments you’ll make.'}</p>
     <div className="account-panel">
-      {loading ? <p role="status">Checking your account…</p> : !supabase ? <p role="alert">Account sign-in is not configured yet. Please try again later.</p> : user && !update ? <>
+      {loading ? <p role="status">Checking your account…</p> : !supabase ? <WarningNotice>Account sign-in is not configured yet. Please try again later.</WarningNotice> : user && !update ? <>
         <span className="eyebrow">SIGNED IN AS</span><p className="account-email">{user.email}</p>
         <Wallet key={user.id} userId={user.id} />
         <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional navigation hint. */ } }}>Take the photos now</a>
@@ -82,7 +83,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
         })}>Resend confirmation email</button>}
         {!update && <div className="account-links"><button className="text-button" disabled={busy} onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}>{mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}</button>{mode === 'signin' && <button className="text-button" disabled={busy} onClick={() => switchMode('reset')}>Forgot your password?</button>}</div>}
       </>}
-      {(error || (!message && initialError)) && <p role="alert" className="account-error">{error || initialError}</p>}
+      {(error || (!message && initialError)) && <WarningNotice>{error || initialError}</WarningNotice>}
       {message && <p role="status" className="account-message">{message}</p>}
     </div><a className="text-button" href="#">Back to Together</a>
   </section>;

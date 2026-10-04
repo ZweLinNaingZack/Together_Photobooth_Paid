@@ -1,3 +1,4 @@
+import { WarningNotice } from '../components/WarningNotice';
 import { CameraCardPreview } from './CameraCardPreview';
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
@@ -179,8 +180,9 @@ export function SessionScreen(props: Props) {
         <div id="shot-countdown" hidden={countdown === null} aria-live="assertive">{countdown}</div>
       </div>
       <ScreenFlash active={flashLit} color={props.flashColor} view={view} />
-      <p id="camera-message" className="session-note" role="status">{message || (duo ? peer.connected ? 'Both cameras are connected. The creator takes each photo and shares it with both of you.' : `${peer.phase}. Your microphone stays off.` : 'Your photos stay in this browser tab.')}</p>
-      {duo && peer.error && <details className="connection-details"><summary>Camera connection options</summary><p>{peer.error}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>Reconnect cameras</button></details>}
+      <p id="camera-message" className="session-note" role="status">{message && message !== 'Waiting for camera permission…' ? '' : message || (duo ? peer.connected ? 'Both cameras are connected. The creator takes each photo and shares it with both of you.' : `${peer.phase}. Your microphone stays off.` : 'Your photos stay in this browser tab.')}</p>
+      <WarningNotice>{message !== 'Waiting for camera permission…' ? message : ''}</WarningNotice>
+      {duo && peer.error && <WarningNotice title="Camera connection"><p>{peer.error}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>Reconnect cameras</button></WarningNotice>}
       {duo && !peer.connected && peer.diagnostics && <details className="connection-details"><summary>Connection details</summary><p>These details help troubleshoot the connection. They contain no photos or invitation codes.</p><pre>{peer.diagnostics}</pre></details>}
       {guest && <p className="session-note">Your creator controls the countdown, retakes, and photo order. Each shared photo appears below.</p>}
       <div className="capture-settings" hidden={guest}><fieldset disabled={locked}><legend>HOW SHALL WE TAKE THEM?</legend>{(['timer', 'manual'] as const).map(value => <label key={value}><input type="radio" name="capture-method" value={value} checked={method === value} onChange={() => { props.onMethod(value); setStatus(''); }} /> {value === 'timer' ? 'With a timer' : 'Manual click'}</label>)}</fieldset><label className="timer-setting" hidden={method === 'manual'}>COUNTDOWN<select id="timer-seconds" value={seconds} disabled={locked} onChange={e => { props.onSeconds(Number(e.target.value)); setStatus(''); }}>{[3, 5, 7].map(value => <option key={value} value={value}>{value} seconds</option>)}</select></label></div>

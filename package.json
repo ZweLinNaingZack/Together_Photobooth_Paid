@@ -1,4 +1,12 @@
 {
+  "name": "online-photobooth-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix website run dev",
+    "build": "npm --prefix website run build",
+    "preview": "npm --prefix website run preview",
+    "test": "npm --prefix website test"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0"
   }

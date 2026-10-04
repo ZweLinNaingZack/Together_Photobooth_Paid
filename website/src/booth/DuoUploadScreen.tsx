@@ -1,3 +1,4 @@
+import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import { layouts, move } from './core';
 import { UploadScreen } from './UploadScreen';
@@ -72,7 +73,8 @@ export function DuoUploadScreen({ card, photos, onPhotos, onBack, onNext }: {
     {stage === 'review' && <>
       <Heading eyebrow="BOTH SIDES, ONE KEEPSAKE" title={<>Your photos. <em>Together.</em></>} note={`${count * 2} photos in ${count} side-by-side pairs. Drag photos within either side to change their order.`} />
       <div className="upload-surface">
-        {preview ? <img className="duo-upload-preview" src={preview} alt="Your combined Duo photocard" /> : <p role="status">{error || 'Preparing your photocard…'}</p>}
+        {preview ? <img className="duo-upload-preview" src={preview} alt="Your combined Duo photocard" /> : <p role="status">{error ? 'Preview unavailable. Replace your photos to retry.' : 'Preparing your photocard…'}</p>}
+        <WarningNotice>{error}</WarningNotice>
         {(['right', 'left'] as const).map(side => {
           const offset = side === 'right' ? 0 : count;
           return <section key={side} aria-label={`${side} photos`}><h2>{side === 'right' ? 'Right side' : 'Left side'}</h2>

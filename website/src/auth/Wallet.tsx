@@ -1,3 +1,4 @@
+import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useState } from 'react';
 import { supabase } from './client';
 import { Topups } from './Topups';
@@ -26,7 +27,7 @@ export function Wallet({ userId, page = 'overview' }: { userId: string; page?: '
     return () => { active = false; };
   }, [userId, attempt, page]);
   return <section className="wallet-panel" aria-label="Your points">
-    {error ? <><p role="alert">{error}</p><button className="text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></> : !wallet ? <p role="status">Loading your points…</p> : <>
+    {error ? <><WarningNotice>{error}</WarningNotice><button className="text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></> : !wallet ? <p role="status">Loading your points…</p> : <>
       <nav className="account-tabs" aria-label="Account pages"><a href="#account" aria-current={page === 'overview' ? 'page' : undefined}>Overview</a><a href="#account/buy" aria-current={page === 'buy' ? 'page' : undefined}>Buy points</a>{wallet.is_admin && <a href="#account/admin" aria-current={page === 'admin' ? 'page' : undefined}>Admin reviews</a>}</nav>
       {page === 'overview' && <div className="wallet-grid"><section className="dashboard-card balance-card"><span className="eyebrow">YOUR BALANCE</span><p className="wallet-balance">{wallet.points.toLocaleString()} <span>points</span></p><p>100 points for one session.</p><a className="primary" href="#account/buy">Buy points</a></section><section className="dashboard-card"><span className="eyebrow">YOUR FIRST MEMORY</span><p className="wallet-balance">{wallet.trial_available ? '01' : '00'} <span>free session</span></p>
       <p>{wallet.trial_reserved ? 'Your free session is reserved for an active booth' : wallet.trial_available ? '1 free session available' : 'Your free session has been used'}</p>
@@ -40,7 +41,7 @@ export function Wallet({ userId, page = 'overview' }: { userId: string; page?: '
       </li>)}</ul>}
       </section></div>}
       {page === 'buy' && <Topups key="buy" userId={userId} admin={false} onCredit={() => setAttempt(n => n + 1)} />}
-      {page === 'admin' && (wallet.is_admin ? <Topups key="admin" userId={userId} admin onCredit={() => {}} /> : <p role="alert">This page is available to administrators only.</p>)}
+      {page === 'admin' && (wallet.is_admin ? <Topups key="admin" userId={userId} admin onCredit={() => {}} /> : <WarningNotice>This page is available to administrators only.</WarningNotice>)}
     </>}
   </section>;
 }

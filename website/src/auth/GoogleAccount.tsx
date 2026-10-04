@@ -1,3 +1,4 @@
+import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { authRedirect, googleAvailable, supabase } from './client';
@@ -40,7 +41,7 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
     <h1 id="account-title">{user ? page === 'buy' ? 'More moments await.' : page === 'admin' ? 'Payment reviews.' : 'Your little moments.' : 'A little closer.'}</h1>
     <p className="account-intro">{user ? user.email : 'Sign in with Google to start making memories.'}</p>
     <div className="account-panel">
-      {loading ? <p role="status">Checking your account…</p> : !supabase ? <p role="alert">Sign-in is not configured yet. Please try again later.</p> : user ? <>
+      {loading ? <p role="status">Checking your account…</p> : !supabase ? <WarningNotice>Sign-in is not configured yet. Please try again later.</WarningNotice> : user ? <>
         <Wallet key={user.id} userId={user.id} page={page} />
         <div className="account-footer-actions">
         <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional hint. */ } }}>Take the photos now</a>
@@ -58,7 +59,7 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
         <small>We’re using Google sign-in during this test phase.</small>
         {available === false && <><p role="status">Google sign-in is temporarily unavailable.</p><button className="text-button" disabled={busy} onClick={() => setRetry(n => n + 1)}>Try again</button></>}
       </>}
-      {(error || callbackError) && <p className="account-error" role="alert">{error || callbackError}</p>}
+      {(error || callbackError) && <WarningNotice>{error || callbackError}</WarningNotice>}
     </div>
     <a className="text-button" href="#">Back to Together</a>
   </section>;

@@ -1,3 +1,4 @@
+import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from './client';
 
@@ -104,6 +105,6 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
       </div>)}</div></div>}
     </section>}
     {receipt && receipt.id !== review && <div className="receipt-view"><h3>Receipt · {receipt.id.slice(0,8)}</h3><img src={receipt.url} alt="Uploaded payment receipt" /><button className="text-button" onClick={() => setReceipt(null)}>Close receipt</button><small>This preview expires after five minutes. Open it again to refresh.</small></div>}
-    {error && <p role="alert" className="account-error">{error}</p>}
+    {error && <WarningNotice>{error}</WarningNotice>}
   </div>;
 }
