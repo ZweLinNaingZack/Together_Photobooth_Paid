@@ -145,5 +145,20 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     await complete(nextId); await complete(nextId);
     assert.equal((await wallet()).points,0);
     assert.equal((await wallet()).reserved_points,0);
+    await db.exec('reset role');
+    await db.exec(await readFile(new URL('../009-variable-topups.sql', import.meta.url), 'utf8'));
+    await as(alice);
+    for (const points of [null, 0, 50, 101, -100, 10100]) {
+      await assert.rejects(() => db.query('select * from together_start_topup($1)', [points]), /steps of 100/);
+    }
+    const bulk = (await db.query('select * from together_start_topup($1)', [300])).rows[0];
+    assert.equal(bulk.points, 300); assert.equal(bulk.amount_mmk, 21000);
+    assert.equal((await start()).id, bulk.id, 'retry returns original order without changing its total');
+    await upload(bulk); await submit(bulk);
+    await as(admin);
+    const bulkOrders = (await db.query('select together_admin_orders() as orders')).rows[0].orders;
+    assert.equal(bulkOrders.find(r => r.id === bulk.id).amount_mmk, 21000);
+    await review(bulk, true, 'BANK-BULK-300'); await review(bulk, true, 'BANK-BULK-300');
+    await as(alice); assert.equal((await wallet()).points, 300, 'bulk approval credits the selected points exactly once');
   } finally { await db.close(); }
 });
