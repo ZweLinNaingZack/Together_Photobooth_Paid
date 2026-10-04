@@ -1,3 +1,5 @@
+import { BoothDialog } from '../components/BoothDialog';
+import { useStepHistory } from '../components/useStepHistory';
 import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from './client';
@@ -5,7 +7,7 @@ import { supabase } from './client';
 type Request = { id: string; user_id: string; points: number; amount_mmk: number; status: 'draft' | 'pending' | 'approved' | 'rejected'; created_at: string; review_note: string | null; customer_name?: string; customer_email?: string };
 const receiptPath = (r: Request) => `${r.user_id}/${r.id}/receipt`;
 function failure(error: { code?: string }) {
-  if (error.code === 'PGRST202') return 'The order dashboard needs its database update. Please run the latest payment migration (009) and refresh.';
+  if (error.code === 'PGRST202') return 'The order dashboard needs its database update. Please run the latest payment migration (010) and refresh.';
   if (error.code === '23505') return 'This bank transaction has already been credited. Please check the reference.';
   if (error.code === 'P0001') return 'The request could not be completed. Check its status and details, or try again later.';
   return 'We couldn’t complete that request. Refresh the payment history before retrying.';
@@ -16,6 +18,8 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
   const [file, setFile] = useState<File | null>(null), [receipt, setReceipt] = useState<{ id: string; url: string } | null>(null);
   const [review, setReview] = useState(''), [reference, setReference] = useState(''), [note, setNote] = useState(''), [verified, setVerified] = useState(false);
   const [points, setPoints] = useState(100);
+  const [selecting, setSelecting] = useState(false);
+  const [changeAmount, setChangeAmount] = useState<(() => void) | null>(null);
   const lock = useRef(false);
   async function refresh() {
     if (!admin) {
@@ -42,16 +46,25 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
     setReceipt({ id: r.id, url: data.signedUrl });
   }
   const open = requests.find(r => r.status === 'draft' || r.status === 'pending');
+  function requestAmountChange(commit: () => void) {
+    if (busy) return;
+    if (open?.status === 'draft') setChangeAmount(() => () => { setPoints(open.points); setFile(null); commit(); });
+  }
+  useStepHistory('payment', !admin && ready, open && !selecting ? 'payment' : 'amount', (target, commit) => {
+    if (target === 'amount') requestAmountChange(commit);
+    else if (open) commit();
+  }, target => setSelecting(target === 'amount'));
   return <div className="topups">
+    <BoothDialog open={!!changeAmount} title="Change point amount?" cancelLabel="Keep this payment" confirmLabel="I haven’t paid — change amount" onCancel={() => setChangeAmount(null)} onConfirm={() => { const proceed=changeAmount; setChangeAmount(null); proceed?.(); }}><p>Only change the amount if you haven’t transferred the money yet. If you already paid, keep this order and submit your receipt.</p></BoothDialog>
     {!admin && <div className="purchase-grid"><section className="dashboard-card purchase-card">
     <h3>Keep making memories</h3>
     <p>7,000 MMK buys 100 points — enough for 1 session.</p>
     <p className="topup-notice">Payments are reviewed by a person. Points arrive after approval, which may take until the next day. You can close this page and return to My account to check.</p>
-    {!ready ? <p>Payment requests aren’t available yet.</p> : !open ? <><div className="point-picker"><span className="eyebrow">CHOOSE YOUR POINTS</span><div className="point-stepper"><button type="button" className="outline-button" disabled={busy || points === 100} onClick={() => setPoints(p => Math.max(100, p - 100))}>− 100</button><output aria-live="polite"><strong>{points.toLocaleString()}</strong> points</output><button type="button" className="outline-button" disabled={busy || points >= 10000} onClick={() => setPoints(p => Math.min(10000, p + 100))}>+ 100</button></div><p aria-live="polite"><strong>{(points / 100 * 7000).toLocaleString()} MMK</strong> · {points / 100} {points === 100 ? 'session' : 'sessions'}</p></div><button className="primary" disabled={busy} onClick={() => void run(async () => {
-      const { error } = await supabase!.rpc('together_start_topup', { requested_points: points }); if (error) throw error;
-      setFile(null); await refresh();
+    {!ready ? <p>Payment requests aren’t available yet.</p> : !open || selecting ? <><div className="point-picker"><span className="eyebrow">CHOOSE YOUR POINTS</span><div className="point-stepper"><button type="button" className="outline-button" disabled={busy || points === 100} onClick={() => setPoints(p => Math.max(100, p - 100))}>− 100</button><output aria-live="polite"><strong>{points.toLocaleString()}</strong> points</output><button type="button" className="outline-button" disabled={busy || points >= 10000} onClick={() => setPoints(p => Math.min(10000, p + 100))}>+ 100</button></div><p aria-live="polite"><strong>{(points / 100 * 7000).toLocaleString()} MMK</strong> · {points / 100} {points === 100 ? 'session' : 'sessions'}</p></div><button className="primary" disabled={busy} onClick={() => void run(async () => {
+      const { error } = await supabase!.rpc(open ? 'together_change_topup' : 'together_start_topup', open ? { request_id: open.id, requested_points: points } : { requested_points: points }); if (error) throw error;
+      setFile(null); await refresh(); setSelecting(false);
     })}>Continue to payment</button></> : open.status === 'pending' ? <p role="status">Your {open.amount_mmk.toLocaleString()} MMK payment for {open.points.toLocaleString()} points is awaiting review. Please don’t transfer again for this request.</p> : <div className="topup-checkout">
-      <h3>Pay with KBZPay</h3>
+      <button className="outline-button" disabled={busy} onClick={() => requestAmountChange(() => setSelecting(true))}>Back to point amount</button><h3>Pay with KBZPay</h3>
       <p>Transfer exactly <strong>{open.amount_mmk.toLocaleString()} MMK</strong> for {open.points.toLocaleString()} points using this QR, then upload your payment receipt below. If you already paid, continue with the receipt only.</p>
       <div className="checkout-columns"><div><img className="bank-qr" src="/kbzpay-payment.jpg" alt="KBZPay payment QR for Zwe Lin Naing" />
       <a href="/kbzpay-payment.jpg" download="Together-KBZPay.jpg">Save QR image</a>

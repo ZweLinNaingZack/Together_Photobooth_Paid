@@ -29,7 +29,12 @@
 .account-tabs a{padding:12px 20px;text-decoration:none;color:inherit;border-radius:8px;font-size:16px}
 .account-tabs a[aria-current=page]{background:#272d27;color:#fff}
 .account-tabs a:hover{box-shadow:inset 0 0 0 1px var(--line)}
-.wallet-grid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:20px;align-items:start}
+.wallet-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:20px;align-items:start}
+.wallet-grid>.dashboard-card:not(.activity-card){grid-column:1}
+.wallet-grid>.activity-card{grid-column:2;grid-row:1 / span 2}
+.account-footer-actions .signout-button{border:2px solid var(--red,#ad2d3d);color:var(--red,#ad2d3d);font-weight:700;padding:16px 28px;border-radius:8px;background:transparent}
+.account-footer-actions .signout-button:hover{background:#ad2d3d;color:white}
+@media(max-width:700px){.wallet-grid>.activity-card{grid-column:1;grid-row:auto}.account-footer-actions .signout-button{width:100%}}
 .dashboard-card{border:1px solid var(--line);border-radius:14px;padding:26px;background:#faf8f2;min-width:0}
 .dashboard-card h2,.dashboard-card h3{margin:0 0 16px;font-size:20px}
 .dashboard-card p{line-height:1.65}

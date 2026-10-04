@@ -1,4 +1,5 @@
 import { WarningNotice } from '../components/WarningNotice';
+import { useStepHistory } from '../components/useStepHistory';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { LeaveDialog } from '../components/LeaveDialog';
@@ -87,6 +88,21 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   function goBack(next: Step) {
     requestLeave(() => { if (party.room) { party.end(); setStep('duo'); } else setStep(next); });
   }
+  useStepHistory<Step>('booth', active, step, (target, commit) => {
+    if (confirmation.busy) return;
+    if (target === 'export' || target === 'design') {
+      if (editingApproved) commit();
+      return;
+    }
+    if (['session','upload'].includes(target) && editingApproved) {
+      if (party.room?.role === 'guest') return;
+      if (party.room && source === 'camera') {
+        void duoControl.current?.({type:'retake', index:null}).then(commit).catch(() => setSharedError('Reconnect your cameras before returning to your photos.'));
+      } else commit();
+      return;
+    }
+    requestLeave(() => { party.end(); commit(); });
+  }, target => setStep(target === 'room' && !party.room ? 'duo' : target));
   useLayoutEffect(() => {
     leaveGuard.current = proceed => requestLeave(() => { party.end(); proceed(); });
     return () => { leaveGuard.current = proceed => proceed(); };

@@ -33,6 +33,7 @@ function harness({cost=100,role='host',invite=null}={}) {
     if(name==='./core')return core;
     if(name==='./photoPosition.js')return{reconcileOffsets};
     if(name==='./frameAssets')return{prefetchFrames:()=>()=>{}};
+    if(name==='../components/useStepHistory')return{useStepHistory:()=>{}};
     if(name==='./useRoom')return{useRoom:()=>party};
     if(name==='./useSessionCharge')return{useSessionCharge:()=>charge};
     if(name==='./editingConfirmation.mjs')return{createEditingConfirmation};

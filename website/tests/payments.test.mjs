@@ -147,14 +147,24 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     assert.equal((await wallet()).reserved_points,0);
     await db.exec('reset role');
     await db.exec(await readFile(new URL('../009-variable-topups.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile(new URL('../010-edit-draft-topup.sql', import.meta.url), 'utf8'));
     await as(alice);
     for (const points of [null, 0, 50, 101, -100, 10100]) {
       await assert.rejects(() => db.query('select * from together_start_topup($1)', [points]), /steps of 100/);
     }
     const bulk = (await db.query('select * from together_start_topup($1)', [300])).rows[0];
     assert.equal(bulk.points, 300); assert.equal(bulk.amount_mmk, 21000);
+    await as(bob);
+    await assert.rejects(() => db.query('select together_change_topup($1,200)',[bulk.id]), /Request unavailable/);
+    await as(alice);
+    const changed=(await db.query('select * from together_change_topup($1,200)',[bulk.id])).rows[0];
+    assert.equal(changed.amount_mmk,14000); assert.equal(changed.points,200);
+    await db.query('select together_change_topup($1,300)',[bulk.id]);
     assert.equal((await start()).id, bulk.id, 'retry returns original order without changing its total');
-    await upload(bulk); await submit(bulk);
+    await upload(bulk);
+    await assert.rejects(() => db.query('select together_change_topup($1,200)',[bulk.id]), /receipt is already saved/);
+    await submit(bulk);
+    await assert.rejects(() => db.query('select together_change_topup($1,200)',[bulk.id]), /Only unpaid drafts/);
     await as(admin);
     const bulkOrders = (await db.query('select together_admin_orders() as orders')).rows[0].orders;
     assert.equal(bulkOrders.find(r => r.id === bulk.id).amount_mmk, 21000);

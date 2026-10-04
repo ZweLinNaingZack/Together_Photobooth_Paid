@@ -1,4 +1,5 @@
 import { WarningNotice } from '../components/WarningNotice';
+import { BoothDialog } from '../components/BoothDialog';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { authRedirect, googleAvailable, supabase } from './client';
@@ -13,6 +14,7 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const lock = useRef(false);
+  const [signout, setSignout] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     setAvailable(null); setError('');
@@ -45,12 +47,13 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
         <Wallet key={user.id} userId={user.id} page={page} />
         <div className="account-footer-actions">
         <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional hint. */ } }}>Take the photos now</a>
-        <button className="text-button" disabled={busy} onClick={async () => {
+        <button className="signout-button" disabled={busy} onClick={() => setSignout(true)}>Sign out</button>
+        <BoothDialog open={signout} title="Sign out?" cancelLabel="Stay signed in" confirmLabel="Sign out" busy={busy} onCancel={() => setSignout(false)} onConfirm={async () => {
           if (lock.current) return; lock.current = true; setBusy(true); setError('');
           try { const { error } = await supabase!.auth.signOut({ scope: 'local' }); if (error) throw error; }
           catch { setError('We couldn’t sign you out. Please try again.'); }
-          finally { lock.current = false; setBusy(false); }
-        }}>Sign out</button></div>
+          finally { lock.current = false; setBusy(false); setSignout(false); }
+        }}><p>You can sign back in any time. Your points and payment requests will stay in your account.</p></BoothDialog></div>
       </> : <>
         <button className="outline-button account-google" disabled={busy || available !== true} onClick={() => void signIn()}>
           {busy ? 'Opening Google…' : available === null ? 'Checking Google sign-in…' : 'Continue with Google'}
