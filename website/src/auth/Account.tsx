@@ -7,6 +7,7 @@ import { authErrorMessage } from './errors';
 import { Wallet } from './Wallet';
 import { GoogleAccount } from './GoogleAccount';
 import { Captcha, captchaKey } from './Captcha';
+import { readBoothReturn } from './inviteReturn.js';
 const emailFlows = (import.meta as ImportMeta & { env: Record<string,string> }).env.VITE_AUTH_EMAIL_FLOWS_ENABLED === 'true';
 type Mode = 'signin' | 'signup' | 'reset';
 export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'admin' }) {
@@ -51,11 +52,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
   }
   const update = recovery && Boolean(user);
   if (user && !update) return <GoogleAccount page={page} />;
-  let returnTo = '#booth';
-  try {
-    const saved = sessionStorage.getItem('together-after-signin');
-    if (saved === '#booth' || saved?.startsWith('#booth?')) returnTo = saved;
-  } catch { /* Default to a new booth if storage is unavailable. */ }
+  const returnTo = readBoothReturn() || '#booth';
   return <section className="account-page" aria-labelledby="account-title">
     <div className="eyebrow">YOUR LITTLE PLACE AT TOGETHER</div>
     <h1 id="account-title">{update ? 'A fresh password.' : user ? 'Welcome back.' : mode === 'signup' ? 'Make yourself at home.' : mode === 'reset' ? 'Let’s get you back in.' : 'A little closer.'}</h1>

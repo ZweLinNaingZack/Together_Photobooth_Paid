@@ -5,13 +5,14 @@ import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import * as core from '../src/booth/core.js';
 import {createEditingConfirmation} from '../src/booth/editingConfirmation.mjs';
+import {reconcileOffsets} from '../src/booth/photoPosition.js';
 
 // Exercise the real Booth coordinator with controlled service responses. Child
 // camera/upload components are boundaries; no camera, account or debit is real.
 const compiled=ts.transpileModule(await readFile(new URL('../src/booth/Booth.tsx',import.meta.url),'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022},
 }).outputText;
-function harness({cost=100,role='host'}={}) {
+function harness({cost=100,role='host',invite=null}={}) {
   const cells=[], hooks=[]; let cursor=0, dirty=false, effects=[], tree, debits=0, commit;
   const charge={cost,busy:false,error:'',receipt:'',reserve:async()=>{},reset:()=>{},complete:()=>{debits++;return new Promise(resolve=>{commit=()=>{charge.receipt='Confirmed';resolve();};});}};
   const party={room:null,busy:false,error:'',ended:false,
@@ -30,15 +31,16 @@ function harness({cost=100,role='host'}={}) {
     if(name==='react')return react;
     if(name==='react/jsx-runtime')return{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'Fragment'};
     if(name==='./core')return core;
+    if(name==='./photoPosition.js')return{reconcileOffsets};
     if(name==='./frameAssets')return{prefetchFrames:()=>()=>{}};
     if(name==='./useRoom')return{useRoom:()=>party};
     if(name==='./useSessionCharge')return{useSessionCharge:()=>charge};
     if(name==='./editingConfirmation.mjs')return{createEditingConfirmation};
     return new Proxy({}, {get:(_,key)=>String(key)});
   };
-  runInNewContext(compiled,{exports,require,crypto,console,window:{addEventListener(){},removeEventListener(){},scrollTo(){}},document:{getElementById:()=>null}});
+  runInNewContext(compiled,{exports,require,crypto,console,window:{setTimeout,clearTimeout,addEventListener(){},removeEventListener(){},scrollTo(){}},document:{getElementById:()=>null}});
   const leaveGuard={current:()=>{}};
-  function render(){let count=0;do{dirty=false;cursor=0;effects=[];tree=exports.Booth({active:true,invite:null,leaveGuard});for(const effect of effects)effect();if(++count>20)throw new Error('Unstable render');}while(dirty);return tree;}
+  function render(){let count=0;do{dirty=false;cursor=0;effects=[];tree=exports.Booth({active:true,invite,leaveGuard});for(const effect of effects)effect();if(++count>20)throw new Error('Unstable render');}while(dirty);return tree;}
   function find(type,predicate=()=>true){render();let result;function walk(node){if(!node||result)return;if(Array.isArray(node)){node.forEach(walk);return;}if(node.type===type&&predicate(node.props)){result=node.props;return;}walk(node.props?.children);}walk(tree);return result;}
   async function flush(){for(let i=0;i<12;i++)await Promise.resolve();render();}
   async function start(mode='solo',source='upload'){
@@ -55,6 +57,17 @@ function harness({cost=100,role='host'}={}) {
   return {find,render,flush,start,party,charge,leaveGuard,debits:()=>debits,commit:()=>commit?.()};
 }
 
+test('authenticated invite opens the waiting room without choosing a mode or charging the guest',async()=>{
+ const ui=harness({role:'guest',invite:'invitation-token'});let received;
+ const join=ui.party.join.bind(ui.party);ui.party.join=async(code,invite)=>{received=invite;return join(code);};
+ ui.render();await new Promise(resolve=>setTimeout(resolve,10));await ui.flush();
+ assert.equal(received,'invitation-token');assert.ok(ui.find('WaitingRoom'));assert.equal(ui.debits(),0);
+});
+test('expired invite stays on join screen with error instead of entering a room',async()=>{
+ const ui=harness({role:'guest',invite:'expired'});ui.party.join=async()=>{ui.party.error='This invitation expired.';return null;};
+ ui.render();await new Promise(resolve=>setTimeout(resolve,10));await ui.flush();
+ assert.equal(ui.find('JoinRoom').error,'This invitation expired.');assert.equal(ui.find('WaitingRoom'),undefined);
+});
 test('solo upload follows source/layout/capture/confirmation/design/export without early deduction', async()=>{
   const ui=harness(); await ui.start();
   ui.find('UploadScreen').onPhotos(['one','two','three']);ui.find('UploadScreen').onNext();await ui.flush();

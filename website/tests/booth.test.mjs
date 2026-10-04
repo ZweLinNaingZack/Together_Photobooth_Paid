@@ -85,7 +85,7 @@ test('all custom exports fill the canvas and draw the correct photo count', asyn
       const expectedWidth = Math.max(layouts[design.layout || 'A'].width, Math.round(design.crop[2]));
       assert.equal(canvas.width, expectedWidth); assert.equal(canvas.height, Math.round(expectedWidth * design.crop[3] / design.crop[2]));
       assert.deepEqual(canvas.calls[0].slice(1), [...design.crop, 0, 0, canvas.width, canvas.height]);
-      assert.equal(canvas.calls.length, design.slots.length + 1 + (musicTitles[template] ? 1 : 0), `${template} draws artwork, photos, and optional title background`);
+      assert.equal(canvas.calls.length, design.slots.length + 1 + (musicTitles[template] ? 2 : 0), `${template} draws artwork, photos, and optional text backgrounds`);
       for (const call of canvas.calls.slice(1, design.slots.length + 1)) {
         const [, x, y, w, h] = call;
         assert(x >= 0 && y >= 0 && x + w <= canvas.width + 1 && y + h <= canvas.height + 1);

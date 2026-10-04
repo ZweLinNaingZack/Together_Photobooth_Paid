@@ -6,14 +6,17 @@ import { SignInDialog } from './components/SignInDialog';
 import { Home } from './pages/Home';
 import { About } from './pages/About';
 import { Booth } from './booth/Booth';
+import { rememberBoothReturn, consumeBoothReturn } from './auth/inviteReturn.js';
 
 export function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, recovery, error: authError } = useAuth();
   const [hash, setHash] = useState(window.location.hash);
   const leaveGuard = useRef<(proceed: () => void) => void>(proceed => proceed());
   const currentHash = useRef(window.location.hash);
   const isBooth = hash === '#booth' || hash.startsWith('#booth?'), isAbout = hash === '#about', isAccount = ['#account', '#account/buy', '#account/admin'].includes(hash);
   const invite = isBooth ? new URLSearchParams(hash.split('?')[1] || '').get('invite') : null;
+  useEffect(() => { if(!loading && !user && isBooth) rememberBoothReturn(hash); }, [loading,user,isBooth,hash]);
+  useEffect(() => { if(!loading && user && !recovery && !authError && isAccount) { const target=consumeBoothReturn(); if(target) window.location.hash=target; } }, [loading,user,recovery,authError,isAccount]);
   useEffect(() => {
     const navigate = () => {
       const next = window.location.hash;
@@ -46,8 +49,8 @@ export function App() {
       {isAbout && <About />}
       {loading && isBooth && <p role="status">Checking your account…</p>}
       {!loading && user && <Booth key={user.id} active={isBooth} invite={invite} leaveGuard={leaveGuard} />}
-      {!loading && !user && isBooth && <SignInDialog onDismiss={() => { window.location.hash = ''; }} onSignIn={() => {
-        try { sessionStorage.setItem('together-after-signin', hash); } catch { /* Sign-in still works without storage. */ }
+      {!loading && !user && isBooth && <SignInDialog onDismiss={() => { consumeBoothReturn(); window.location.hash = ''; }} onSignIn={() => {
+        rememberBoothReturn(hash);
       }} />}
     </main>
   </>;

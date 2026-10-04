@@ -23,6 +23,7 @@ import type { DuoEvent } from './useDuoPeer';
 import { useSessionCharge } from './useSessionCharge';
 import './journey.css';
 import { prefetchFrames } from './frameAssets';
+import { reconcileOffsets } from './photoPosition.js';
 
 const progress: [Step, string][] = [['mode', 'Solo or duo'], ['source', 'Photo source'], ['layout', 'Your layout'], ['session', 'Your photos'], ['design', 'Frame & filter'], ['export', 'Export & download']];
 
@@ -71,7 +72,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   function clearPhotos() {
     editingGate.current?.cancel(); setConfirmation({open:false,busy:false,error:''}); setEditingApproved(false);
     charge.reset();
-    setCard(current => ({ ...current, shots: [] }));
+    setCard(current => ({ ...current, shots: [], offsets: [] }));
     setDuoUploads([]);
     setRetake(null); setRestoreCamera(false);
     document.getElementById('print-sheet')?.replaceChildren();
@@ -104,7 +105,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   useEffect(() => { if (active) { setUseInvite(true); setStep(invite ? 'join' : 'mode'); if (invite) setMode('duo'); setRetake(null); setRestoreCamera(false); setInstructions(!invite); } else { setInstructions(false); party.end(); } }, [active, invite]);
   // A missed heartbeat must not unmount the camera or silently send one user back.
   useEffect(() => { if (active && !instructions) { screen.current?.querySelector('h1')?.focus({ preventScroll: true }); window.scrollTo(0, 0); } }, [step, active, instructions]);
-  const change = (patch: Partial<CardState>) => setCard(current => ({ ...current, ...patch }));
+  const change = (patch: Partial<CardState>) => setCard(current => ({ ...current, ...patch, ...(patch.shots ? { offsets: reconcileOffsets(current.shots, current.offsets, patch.shots) } : {}) }));
   async function reviewUploads(shots = card.shots) {
     if (await requestEditing()) { change({ shots }); setEditingApproved(true); setRetake(null); setStep('design'); }
   }
@@ -113,7 +114,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       const count = layouts[card.layout].count;
       setDuoUploads(current => [...move(current.slice(0, count), from, to), ...move(current.slice(count), from, to)]);
     }
-    const apply = () => { setCard(current => ({ ...current, shots: move(current.shots, from, to) })); setRetake(null); };
+    const apply = () => { setCard(current => { const shots = move(current.shots, from, to); const offsets = move(current.shots.map((_, i) => current.offsets?.[i] || { x: .5, y: .5 }), from, to); return { ...current, shots, offsets }; }); setRetake(null); };
     if (party.room?.role === 'host' && source === 'camera') {
       void duoControl.current?.({ type: 'move', from, to }).then(apply).catch(() => setSharedError('Reconnect your cameras before changing the shared photo order.'));
     } else apply();
@@ -137,6 +138,15 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     const joined = await party.join(code, useInvite ? invite : null);
     if (joined) { change({ layout: joined.settings.layout, template: null, shots: [] }); setSource(joined.settings.source); setMode('duo'); setStep('room'); }
   }
+  useEffect(() => {
+    if (!active || !invite) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const joined = await party.join('', invite);
+      if (joined && !cancelled) { change({ layout: joined.settings.layout, template: null, shots: [] }); setSource(joined.settings.source); setMode('duo'); setStep('room'); }
+    }, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [active, invite]);
   async function enterParty() {
     const state = await party.check();
     if (state?.bothReady) {
@@ -166,7 +176,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         {active && step === 'layout' && <><LayoutScreen busy={party.busy || charge.busy} selected={card.layout} onSelect={layout => { if (layout !== card.layout) change({ layout, shots: [], template: null }); setRetake(null); }} onBack={() => setStep(mode === 'duo' && source === 'camera' ? 'duo' : 'source')} onNext={() => void startSession()} /><p className="room-error" role="alert">{party.error}</p></>}
         {active && step === 'source' && <SourceScreen mode={mode} onBack={() => setStep('mode')} onChoose={choice => { change({ shots: [], template: null }); setSource(choice); setRetake(null); setStep(mode === 'duo' && choice === 'camera' ? 'duo' : 'layout'); }} />}
         {active && (step === 'session' || ['design','export'].includes(step) && party.room && source === 'camera') && <div hidden={step !== 'session'}><SessionScreen room={party.room} visible={step === 'session'} duoControl={duoControl} onPartnerConnection={setPeerConnected} onPartnerExit={() => setExplicitDisconnect(true)} onSharedPhotos={shots => change({ shots })} onRemoteSession={index => { setRetake(index); setStep('session'); }} card={card} method={method} seconds={seconds} onMethod={setMethod} onSeconds={setSeconds} retake={retake} onRetake={setRetake} restoreCamera={restoreCamera} interrupted={instructions || !!pendingLeave || confirmation.open || disconnectOpen} flash={flash} flashColor={flashColor} onFlashChange={setFlash} onFlashColor={setFlashColor} mirror={mirror} onMirrorChange={setMirror}
-          beforeReview={requestEditing} onShot={(index, shot) => setCard(current => ({ ...current, shots: replaceShot(current.shots, index, shot) }))} onMove={reorder} onBack={() => goBack('layout')} onNext={wasCamera => { setRestoreCamera(wasCamera); setRetake(null); setEditingApproved(true); setStep('design'); }} /></div>}
+          beforeReview={requestEditing} onShot={(index, shot) => setCard(current => ({ ...current, shots: replaceShot(current.shots, index, shot), offsets: reconcileOffsets(current.shots, current.offsets, replaceShot(current.shots, index, shot)) }))} onMove={reorder} onBack={() => goBack('layout')} onNext={wasCamera => { setRestoreCamera(wasCamera); setRetake(null); setEditingApproved(true); setStep('design'); }} /></div>}
         {active && step === 'upload' && mode === 'solo' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('layout')} onNext={() => void reviewUploads()} />}
         {active && step === 'upload' && mode === 'duo' && <DuoUploadScreen card={card} photos={duoUploads} onPhotos={setDuoUploads} onBack={() => goBack('layout')} onNext={shots => void reviewUploads(shots)} />}
         {active && editingApproved && (step === 'design' || step === 'export') && <><EditScreen stage={step} onContinue={() => setStep('export')} photosLocked={party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => void retakeFromEdit(null)} onDesign={() => setStep('design')} /><p className="room-error" role="alert">{sharedError}</p></>}

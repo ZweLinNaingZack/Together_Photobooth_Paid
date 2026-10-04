@@ -8,6 +8,7 @@ import { Heading } from './shared';
 import type { CardState } from './types';
 import { DesignScreen } from './DesignScreen';
 import { musicTitles } from './musicTitle.js';
+import { PhotoPan } from './PhotoPan';
 
 interface Props {
   photosLocked?: boolean;
@@ -19,6 +20,7 @@ interface Props {
 }
 export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign, onContinue, stage, source = 'camera', photosLocked = false }: Props) {
   const [preview, setPreview] = useState('');
+  const [renderedFrame,setRenderedFrame] = useState('');
   const [previewStatus, setPreviewStatus] = useState('Preparing your photocard…');
   const [previewError, setPreviewError] = useState(false), [retry, setRetry] = useState(0);
   const [format, setFormat] = useState('png'), [status, setStatus] = useState('');
@@ -39,9 +41,9 @@ export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign,
     const timer = window.setTimeout(async () => {
       try {
         const canvas = await renderCard({ ...card, preview: true });
-        if (!cancelled) { setPreview(canvas.toDataURL('image/png')); setPreviewStatus('Your layout, photo order and filter are included in the download.'); }
+        if (!cancelled) { setPreview(canvas.toDataURL('image/png')); setRenderedFrame(`${card.layout}:${card.template}`); setPreviewStatus('Your layout, photo order and filter are included in the download.'); }
       } catch { if (!cancelled) { setPreviewError(true); setPreviewStatus('This frame couldn’t load. Retry or choose another frame.'); } }
-    }, 30);
+    }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [card, retry]);
 
@@ -71,13 +73,13 @@ export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign,
     finally { exportLock.current = false; if (alive.current) setExporting(false); }
   }
   return <><Heading eyebrow={stage === 'design' ? 'FRAME & FILTER' : 'YOUR FINISHED MOMENTS'} title={<>Your photos. <em>Your keepsake.</em></>} note={`${layout.name} · ${layout.note}. ${stage === 'design' ? 'Match a frame and filter to your photos.' : 'Ready to download or print.'}`} />
-    <div className={`finish-grid ${stage === 'export' ? 'export-preview-grid' : 'customization-grid'}`}><div className="preview-workspace"><div className="final-preview">{preview ? <img id="card-preview" src={preview} alt="Your photocard preview" /> : <span className="preview-placeholder">Preparing your photos…</span>}<p id="preview-status" role="status">{previewStatus}</p>{previewError && <button className="text-button" onClick={() => setRetry(value => value + 1)}>Retry frame</button>}</div>
+    <div className={`finish-grid ${stage === 'export' ? 'export-preview-grid' : 'customization-grid'}`}><div className="preview-workspace"><div className="final-preview">{preview ? <div className="pan-surface"><img id="card-preview" src={preview} alt="Your photocard preview" draggable={false} />{stage === 'design' && renderedFrame === `${card.layout}:${card.template}` && <PhotoPan card={card} onChange={onChange} />}</div> : <span className="preview-placeholder">Preparing your photos…</span>}<p id="preview-status" role="status">{previewStatus}</p>{previewError && <button className="text-button" onClick={() => setRetry(value => value + 1)}>Retry frame</button>}</div>
     {stage === 'design' && <section className="editing-designs" aria-label="Frame selection"><h2>Choose your frame <small>Swipe to explore</small></h2><DesignScreen embedded card={card} onSelect={template => onChange({template})} onBack={onBack} onNext={onContinue} /></section>}</div>
-      <div className="finish-controls" hidden={stage === 'export'}><div className="chosen-design-note"><strong>{card.template ? cardDesigns[card.template].name : 'Classic'}</strong></div>
+      <div className="finish-controls" hidden={stage === 'export'}><p className="session-note">Drag a photo in the preview to adjust its crop. Use arrow keys when a photo is focused, or Home to center it.</p><div className="chosen-design-note"><strong>{card.template ? cardDesigns[card.template].name : 'Classic'}</strong></div>
         {!card.template && <fieldset disabled={exporting}><legend>FRAME COLOR</legend><div className="swatches">{Object.entries(colors).map(([key, color]) => <button key={key} className={`swatch ${card.color === key ? 'active' : ''}`} aria-label={key} aria-pressed={card.color === key} style={{ '--swatch': color[0] } as CSSProperties} onClick={() => onChange({ color: key })} />)}</div></fieldset>}
         <fieldset disabled={exporting}><legend>PHOTO FILTER</legend><div className="filter-options">{Object.entries(filters).map(([key, name]) => <button key={key} className={`filter ${card.filter === key ? 'active' : ''}`} aria-pressed={card.filter === key} onClick={() => onChange({ filter: key })}>{name}</button>)}</div></fieldset>
         {!card.template && <><label className="caption-label" htmlFor="card-caption">A FEW WORDS TO KEEP</label><input id="card-caption" maxLength={28} value={card.caption} disabled={exporting} onChange={e => onChange({ caption: e.target.value })} /></>}
-        {card.template && card.template in musicTitles && <><label className="caption-label" htmlFor="track-title">SONG / TRACK TITLE</label><input id="track-title" maxLength={60} placeholder="Our little moment" value={card.trackTitle || ''} disabled={exporting} onChange={e => onChange({ trackTitle: e.target.value })} /><p className="session-note">Up to 60 characters. The title fits automatically.</p></>}
+        {card.template && card.template in musicTitles && <><label className="caption-label" htmlFor="track-title">SONG / TRACK TITLE</label><input id="track-title" maxLength={60} placeholder="Our little moment" value={card.trackTitle || ''} disabled={exporting} onChange={e => onChange({ trackTitle: e.target.value })} /><label className="caption-label" htmlFor="track-subtitle">ARTIST / SUBTITLE</label><input id="track-subtitle" maxLength={60} placeholder="Together" value={card.trackSubtitle || ''} disabled={exporting} onChange={e => onChange({ trackSubtitle: e.target.value })} /><p className="session-note">Up to 60 characters each. Text fits automatically.</p></>}
         <p className="session-note">{card.template ? 'Your selected design is ready. Filters apply only to your photos; the printed artwork stays unchanged.' : 'Filters apply to the photos. Your original captures stay unchanged.'}</p><button className="text-button" disabled={exporting || photosLocked} onClick={onBack}>Back to your photos</button>
       </div>
     </div>{stage === 'design' && <>{photosLocked && <p className="session-note">Your creator can reorder or retake your shared photos. You can choose your own frame and filter.</p>}<PhotoTray actionLabel={source === 'upload' ? 'Replace' : 'Retake'} shots={card.shots} count={layout.count} retake={null} disabled={exporting || photosLocked} onMove={onMove} onRetake={onRetake} /><div className="step-actions"><button className="primary" onClick={onContinue}>Continue to export</button></div></>}

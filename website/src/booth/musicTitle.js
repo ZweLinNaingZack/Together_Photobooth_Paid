@@ -11,7 +11,7 @@ export const musicTitles = {
 export function trackTitle(value) {
   return Array.from((value || '').trim()).slice(0, 60).join('') || 'Our little moment';
 }
-export function drawMusicTitle(ctx, art, design, key, value, scale) {
+export function drawMusicTitle(ctx, art, design, key, value, scale, subtitle) {
   const region = musicTitles[key];
   if (!region) return;
   const { x, y, w, h } = region, [cx, cy] = design.crop;
@@ -27,5 +27,15 @@ export function drawMusicTitle(ctx, art, design, key, value, scale) {
   ctx.font = `700 ${size}px "DM Sans", sans-serif`;
   while (ctx.measureText(title).width > w && size > 16) ctx.font = `700 ${--size}px "DM Sans", sans-serif`;
   ctx.fillText(title, x, y + h / 2, w);
+  const raster = ['music-player-c','music-player-e','music-player-k'].includes(key);
+  const sy = key === 'music-player-k' ? 1080 : raster ? 2012 : key === 'music-player-g' ? 806 : 1320;
+  const sh = raster ? 64 : 42;
+  ctx.drawImage(art, x, sy + sh + 4, w, 2, x, sy, w, sh);
+  ctx.fillStyle = '#999';
+  const artist = Array.from((subtitle || '').trim()).slice(0,60).join('') || 'Together';
+  size = Math.round(region.size * .7);
+  ctx.font = `400 ${size}px "DM Sans", sans-serif`;
+  while(ctx.measureText(artist).width > w && size > 12) ctx.font = `400 ${--size}px "DM Sans", sans-serif`;
+  ctx.fillText(artist, x, sy + sh / 2, w);
   ctx.restore();
 }

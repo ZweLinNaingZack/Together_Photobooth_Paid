@@ -27,7 +27,7 @@ test('music titles have a default, bounded Unicode length, and fit their safe ar
  for(const [key,region] of Object.entries(musicTitles)){
    const design=cardDesigns[key];assert.ok(region.x+region.w<=design.size[0]);assert.ok(region.y+region.h<=design.size[1]);
    let output;const ctx={save(){},restore(){},translate(){},scale(){},drawImage(){},measureText(t){return{width:t.length*parseFloat(this.font.split(' ')[1])};},fillText(...args){output=args;}};
-   drawMusicTitle(ctx,{},design,key,'W'.repeat(60),1);
+   drawMusicTitle(ctx,{},design,key,'W'.repeat(60),1,'W'.repeat(60));
    assert.equal(output[0].length,60);assert.equal(output[3],region.w);assert.ok(parseFloat(ctx.font.split(' ')[1])<=region.size);
  }
 });

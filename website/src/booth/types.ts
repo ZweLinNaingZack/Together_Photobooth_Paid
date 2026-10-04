@@ -9,5 +9,7 @@ export interface CardState {
   color: string;
   caption: string;
   trackTitle?: string;
+  trackSubtitle?: string;
+  offsets?: { x: number; y: number }[];
   design: string;
 }

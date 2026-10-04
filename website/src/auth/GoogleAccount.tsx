@@ -3,6 +3,7 @@ import { useAuth } from './AuthProvider';
 import { authRedirect, googleAvailable, supabase } from './client';
 import { Wallet } from './Wallet';
 import './account.css';
+import { readBoothReturn } from './inviteReturn.js';
 
 // Google-only test phase. Account.tsx retains the email flows for later use.
 export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy' | 'admin' }) {
@@ -33,11 +34,7 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
       setError('Google sign-in could not start. Please try again.');
     } finally { lock.current = false; setBusy(false); }
   }
-  let returnTo = '#booth';
-  try {
-    const saved = sessionStorage.getItem('together-after-signin');
-    if (saved === '#booth' || saved?.startsWith('#booth?')) returnTo = saved;
-  } catch { /* Continue without the optional invitation hint. */ }
+  const returnTo = readBoothReturn() || '#booth';
   return <section className={`account-page ${user ? 'account-workspace' : ''}`} aria-labelledby="account-title">
     <div className="eyebrow">YOUR LITTLE PLACE AT TOGETHER</div>
     <h1 id="account-title">{user ? page === 'buy' ? 'More moments await.' : page === 'admin' ? 'Payment reviews.' : 'Your little moments.' : 'A little closer.'}</h1>
