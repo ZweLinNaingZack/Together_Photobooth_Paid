@@ -78,7 +78,7 @@ test('all custom exports fill the canvas and draw the correct photo count', asyn
     canvases.push(canvas); return canvas;
   } };
   try {
-    assert.equal(Object.keys(cardDesigns).length, 70);
+    assert.equal(Object.keys(cardDesigns).length, 71);
     assert(!cardDesigns['clapper-filmstrip']);
     for (const [template, design] of Object.entries(cardDesigns)) {
       const canvas = await renderCard({ layout: design.layout || 'A', template, shots: design.slots.map((_, i) => `photo${i}`), filter: 'original' });

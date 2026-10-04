@@ -4,3 +4,8 @@ export const cardDesigns:Record<string,CardDesign>={"breaking-news":{"name":"Bre
 export const colors:Record<string,string[]>={cherry:['#a82e3e','#fff7ec'],cream:['#faf6ea','#262a27'],ink:['#292b2a','#faf6ea'],blue:['#c1d6e3','#262a27']};
 
 Object.assign(cardDesigns, templateCatalog);
+cardDesigns['music-player-a'] = {
+  name: 'Music Player', layout: 'A', size: [600, 1800], crop: [0, 0, 600, 1800],
+  src: '/frames/music-player-layout-A.svg',
+  slots: [110, 490, 870].map(y => ({ x: 48, y, w: 504, h: 360, r: 5 })),
+};

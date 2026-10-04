@@ -1,5 +1,6 @@
 // Coordinates use each source artwork's pixel space, before cropping/scaling.
 export const musicTitles = {
+  'music-player-a': { x: 50, y: 1260, w: 500, h: 55, size: 42 },
   'music-player-b': { x: 50, y: 1260, w: 500, h: 55, size: 42 },
   'music-player-d': { x: 50, y: 1260, w: 1100, h: 55, size: 42 },
   'music-player-g': { x: 75, y: 742, w: 1650, h: 58, size: 48 },
