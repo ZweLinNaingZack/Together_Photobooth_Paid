@@ -16,7 +16,7 @@ export function App() {
   const isBooth = hash === '#booth' || hash.startsWith('#booth?'), isAbout = hash === '#about', isAccount = ['#account', '#account/buy', '#account/admin'].includes(hash);
   const invite = isBooth ? new URLSearchParams(hash.split('?')[1] || '').get('invite') : null;
   useEffect(() => { if(!loading && !user && isBooth) rememberBoothReturn(hash); }, [loading,user,isBooth,hash]);
-  useEffect(() => { if(!loading && user && !recovery && !authError && isAccount) { const target=consumeBoothReturn(); if(target) window.location.hash=target; } }, [loading,user,recovery,authError,isAccount]);
+  useEffect(() => { if(!loading && user && !recovery && !authError && isAccount && hash !== '#account/admin') { const target=consumeBoothReturn(); if(target) window.location.hash=target; } }, [loading,user,recovery,authError,isAccount,hash]);
   useEffect(() => {
     const navigate = () => {
       const next = window.location.hash;

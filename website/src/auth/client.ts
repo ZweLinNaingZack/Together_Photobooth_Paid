@@ -6,7 +6,11 @@ function publicKey(value: string) {
   try { return JSON.parse(atob(value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role === 'anon'; } catch { return false; }
 }
 export const supabase = url && publicKey(key) ? createClient(url, key, { auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }) : null;
-export const authRedirect = (recovery = false) => `${location.origin}${location.pathname}${recovery ? '?recovery=1' : ''}#account`;
+export const authRedirect = (recovery = false) => {
+  const order = new URLSearchParams(location.search).get('order');
+  const query = recovery ? '?recovery=1' : order && /^[0-9a-f-]{36}$/i.test(order) ? `?order=${encodeURIComponent(order)}` : '';
+  return `${location.origin}${location.pathname}${query}${!recovery && query ? '#account/admin' : '#account'}`;
+};
 export async function googleAvailable(signal: AbortSignal) {
   if (!supabase) return false;
   const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: key }, signal });

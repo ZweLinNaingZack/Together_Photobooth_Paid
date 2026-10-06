@@ -3,5 +3,5 @@
   "framework": "vite",
   "buildCommand": "pnpm build",
   "outputDirectory": "dist",
-  "functions": { "api/rooms/*.mjs": { "maxDuration": 30 } }
+  "functions": { "api/rooms/*.mjs": { "maxDuration": 30 }, "api/payment-emails.mjs": { "maxDuration": 30 } }
 }

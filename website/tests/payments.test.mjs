@@ -148,6 +148,7 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     await db.exec('reset role');
     await db.exec(await readFile(new URL('../009-variable-topups.sql', import.meta.url), 'utf8'));
     await db.exec(await readFile(new URL('../010-edit-draft-topup.sql', import.meta.url), 'utf8'));
+    await db.exec(await readFile(new URL('../011-payment-emails.sql', import.meta.url), 'utf8'));
     await as(alice);
     for (const points of [null, 0, 50, 101, -100, 10100]) {
       await assert.rejects(() => db.query('select * from together_start_topup($1)', [points]), /steps of 100/);
@@ -170,5 +171,31 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     assert.equal(bulkOrders.find(r => r.id === bulk.id).amount_mmk, 21000);
     await review(bulk, true, 'BANK-BULK-300'); await review(bulk, true, 'BANK-BULK-300');
     await as(alice); assert.equal((await wallet()).points, 300, 'bulk approval credits the selected points exactly once');
+    await assert.rejects(() => db.query('select * from together_email_jobs'), /permission denied/);
+    await assert.rejects(() => db.query('select together_claim_email()'), /permission denied/);
+    await db.exec('reset role');
+    const jobs=(await db.query('select * from together_email_jobs order by created_at')).rows;
+    assert.equal(jobs.length,2,'one submission and one approval despite retries');
+    assert.equal(jobs.find(j=>j.event==='approved').payload.balance,300);
+    await as('', 'service_role');
+    const claimed=(await db.query('select * from together_claim_email()')).rows[0];
+    const other=(await db.query('select * from together_claim_email()')).rows[0];
+    assert.notEqual(claimed.id,other.id,'leased jobs cannot be claimed twice');
+    const body={subject:'test',html:'test'};
+    const prepared=await db.query('select together_prepare_email($1,$2,$3) as body',[claimed.id,claimed.lease,body]);
+    assert.deepEqual(prepared.rows[0].body,body);
+    const same=await db.query('select together_prepare_email($1,$2,$3) as body',[claimed.id,claimed.lease,{subject:'changed'}]);
+    assert.deepEqual(same.rows[0].body,body,'retry payload is immutable');
+    await db.query('select together_finish_email($1,$2,$3,null,false)',[claimed.id,claimed.lease,'provider-test']);
+    await db.exec('reset role');
+    assert.equal((await db.query('select status from together_email_jobs where id=$1',[claimed.id])).rows[0].status,'sent');
+    await as(alice);
+    const referenceOnly=await start();
+    await db.query('select together_submit_topup($1,$2)',[referenceOnly.id,'TRANSFER-456']);
+    await as(admin);await review(referenceOnly,false,'','');
+    await db.exec('reset role');
+    const rejection=(await db.query("select payload from together_email_jobs where order_id=$1 and event='rejected'",[referenceOnly.id])).rows[0];
+    assert.equal(rejection.payload.reference,'TRANSFER-456');
+    assert.equal(rejection.payload.balance,300,'rejection does not change balance');
   } finally { await db.close(); }
 });
