@@ -14,8 +14,10 @@ Deno.serve(async req => {
   const signal=AbortSignal.timeout(4000);
   for(let i=0;i<recipients.length;i++){
    const item=recipients[i];if(!item.email)throw new Error('Missing recipient');
-   const link=new URL('/auth/v1/verify',Deno.env.get('SUPABASE_URL'));
-   link.searchParams.set('token',item.hash);link.searchParams.set('type',action);link.searchParams.set('redirect_to',d.redirect_to||site);
+   const direct=action==='signup'||action==='recovery';
+   const link=direct?new URL('/#account',site):new URL('/auth/v1/verify',Deno.env.get('SUPABASE_URL'));
+   if(direct){link.searchParams.set('auth_token_hash',item.hash);link.searchParams.set('auth_type',action==='signup'?'email':'recovery');}
+   else {link.searchParams.set('token',item.hash);link.searchParams.set('type',action);link.searchParams.set('redirect_to',d.redirect_to||site);}
    const template=authEmail(action,link.href,Deno.env.get('EMAIL_LOGO_URL')||`${new URL(site).origin}/email-logo.png`,support,d.token);
    // Await provider acceptance; no sleeps, SMTP handshake or untracked background work.
    const result=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json','Idempotency-Key':`auth/${req.headers.get('webhook-id')}/${i}`},body:JSON.stringify({from,to:[item.email],reply_to:support,...template}),signal});

@@ -13,7 +13,7 @@ import { passwordRequirements, strongPassword } from './passwordPolicy.js';
 const emailFlows = (import.meta as ImportMeta & { env: Record<string,string> }).env.VITE_AUTH_EMAIL_FLOWS_ENABLED === 'true';
 type Mode = 'signin' | 'signup' | 'reset';
 export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'admin' }) {
-  const { user, loading, recovery, finishRecovery, error: initialError } = useAuth();
+  const { user, loading, recovery, finishRecovery, error: initialError, emailLink, verifyEmailLink } = useAuth();
   const [mode, setMode] = useState<Mode>('signin'), [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [google, setGoogle] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [error, setError] = useState('');
   const lock = useRef(false);
@@ -39,18 +39,21 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
     if (!recovery && (!captchaKey || !captchaToken)) { setError('Please complete the verification first.'); return; }
     await run(async () => {
       if (recovery && user) {
-        const { error } = await client.auth.updateUser({ password });
-        if (error) { setError(authErrorMessage(error)); return; }
+        const {data}=await client.auth.getSession();
+        const response=await fetch('/api/password-account',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${data.session?.access_token||''}`},body:JSON.stringify({operation:'update',password})});
+        const result=await response.json();
+        if (!response.ok) { setError(authErrorMessage({code:result.code,status:response.status})); return; }
         setPassword(''); finishRecovery(); setMessage('Your password has been updated.');
       } else if (mode === 'reset') {
         const { error } = await client.auth.resetPasswordForEmail(email.trim(), { redirectTo: authRedirect(true), captchaToken });
         if (error) { setError(authErrorMessage(error)); return; }
-        setMessage('If an account exists for this email, you’ll receive a reset link. Open it in this browser.');
+        setMessage('If an account exists for this email, you’ll receive a reset link. Use the newest email.');
       } else if (mode === 'signup') {
-        const { error } = await client.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirect(), captchaToken } });
+        const response=await fetch('/api/password-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'signup',email:email.trim(),password,captchaToken})});
+        const result=await response.json();
         setPassword('');
-        if (error) { setError(authErrorMessage(error)); return; }
-        setMessage('Check your email for a confirmation link and open it in this browser. If you already have an account, use Sign in.');
+        if (!response.ok) { setError(authErrorMessage({code:result.code,status:response.status})); return; }
+        setMessage('Check your email for a confirmation link. If you already have an account, use Sign in.');
       } else {
         const response = await fetch('/api/password-login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:email.trim(),password,captchaToken})});
         const result=await response.json(); setPassword('');
@@ -63,6 +66,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
     setCaptchaToken(''); setCaptchaAttempt(n => n+1);
   }
   const update = recovery && Boolean(user);
+  if(emailLink)return <section className="account-page"><div className="account-panel"><h1>Confirm your email link.</h1><p>Continue to securely verify your email or open the password reset form.</p><button className="primary" disabled={busy||loading} onClick={()=>void run(verifyEmailLink)}>{busy?'Verifying…':'Verify and continue'}</button>{(error||initialError)&&<WarningNotice>{error||initialError}</WarningNotice>}<a className="text-button" href="/#account" onClick={e=>{e.preventDefault();location.replace('/#account');location.reload();}}>Back to sign in</a></div></section>;
   if (user && !update) return <GoogleAccount page={page} />;
   const returnTo = readBoothReturn() || '#booth';
   return <section className="account-page" aria-labelledby="account-title">
@@ -90,7 +94,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
           const token = captchaToken; setCaptchaToken(''); setCaptchaAttempt(n => n+1);
           const { error } = await supabase!.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: authRedirect(), captchaToken: token } });
           if (error) { setError(authErrorMessage(error)); return; }
-          setMessage('If this email has an account awaiting confirmation, a new link has been requested. Open the newest email in this browser.');
+          setMessage('If this email has an account awaiting confirmation, a new link has been requested. Open the newest email.');
         })}>Resend confirmation email</button>}
         {!update && <div className="account-links"><button className="text-button" disabled={busy} onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}>{mode === 'signin' ? 'New here? Create an account' : 'Already have an account? Sign in'}</button>{mode === 'signin' && <button className="text-button" disabled={busy} onClick={() => switchMode('reset')}>Forgot your password?</button>}</div>}
       </>}

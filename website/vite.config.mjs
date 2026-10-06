@@ -2,17 +2,19 @@ import { loadEnv } from 'vite';
 import { createRoomService, roomMiddleware } from './server/rooms.mjs';
 import { createTurnProvider } from './server/turn.mjs';
 import { makeLoginHandler } from './api/password-login.mjs';
+import { makeAccountHandler } from './api/password-account.mjs';
 // Local rooms run alongside Vite. Static-only hosting does not provide this API.
 const allowedHosts = ['log-classroom-perfect-fly.trycloudflare.com', '.trycloudflare.com'];
 export default ({ mode }) => {
   // Server-only credentials: never prefix these with VITE_ or expose them via define.
   const env = loadEnv(mode, process.cwd(), 'TURN_');
   const login = makeLoginHandler({env:loadEnv(mode, process.cwd(), '')});
-  const loginPlugin = {name:'together-login', configureServer(server) { server.middlewares.use('/api/password-login', async(req,res)=>{
+  const account = makeAccountHandler({env:loadEnv(mode, process.cwd(), '')});
+  const loginPlugin = {name:'together-login', configureServer(server) { for(const [path,handler] of [['/api/password-login',login],['/api/password-account',account]])server.middlewares.use(path, async(req,res)=>{
     try { let body=''; for await(const chunk of req){body+=chunk;if(body.length>16384){res.statusCode=413;res.end();return;}}
       req.body=body?JSON.parse(body):{};
       res.status=code=>{res.statusCode=code;return res;};res.json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));return res;};
-      await login(req,res);
+      await handler(req,res);
     }catch{res.statusCode=400;res.end('{"message":"Invalid request"}');}
   });}};
   const middleware = () => roomMiddleware(createRoomService({ rtcConfig: createTurnProvider({ env }) }));

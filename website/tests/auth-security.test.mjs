@@ -4,6 +4,32 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {strongPassword} from '../src/auth/passwordPolicy.js';
 import {makeLoginHandler} from '../api/password-login.mjs';
+import {makeAccountHandler} from '../api/password-account.mjs';
+import {readEmailCallback,cleanEmailCallback} from '../src/auth/emailCallback.js';
+test('signup and reset reject weak passwords before contacting Supabase',async()=>{
+ const handler=makeAccountHandler({fetcher:()=>{throw Error('Must not contact provider');}});
+ for(const operation of ['signup','update'])for(const password of ['abcdefgh','ABCDEFGH1!','abcdefgh1!','Abcdefgh!','Abcdefgh1']){
+  const res={setHeader(){},status(n){this.statusCode=n;return this;},json(value){this.body=value;return this;}};
+  await handler({method:'POST',headers:{},body:{operation,password}},res);
+  assert.equal(res.statusCode,422);assert.equal(res.body.code,'weak_password');
+ }
+});
+test('email callbacks accept only email/recovery and remove secrets without dropping routing',()=>{
+ for(const type of ['email','recovery']){
+  const url=`https://example.test/?auth_token_hash=secret&auth_type=${type}#account`;
+  assert.deepEqual(readEmailCallback(url),{token_hash:'secret',type});
+  assert.equal(cleanEmailCallback(url),'https://example.test/#account');
+ }
+ assert.equal(readEmailCallback('https://example.test/?auth_token_hash=secret&auth_type=admin'),null);
+});
+test('strong signup preserves CAPTCHA and update requires a session',async()=>{
+ let body;
+ const handler=makeAccountHandler({env:{SUPABASE_URL:'https://project.test',VITE_SUPABASE_PUBLISHABLE_KEY:'public',SITE_URL:'https://site.test'},fetcher:async(url,options)=>{body=JSON.parse(options.body);assert.equal(url.searchParams.get('redirect_to'),'https://site.test/#account');return {ok:true,json:async()=>({id:'private'})};}});
+ const res={setHeader(){},status(n){this.statusCode=n;return this;},json(value){this.body=value;return this;}};
+ await handler({method:'POST',headers:{},body:{operation:'signup',email:'alice@gmail.com',password:'Abcdefg1!',captchaToken:'captcha'}},res);
+ assert.equal(res.statusCode,200);assert.deepEqual(body.gotrue_meta_security,{captcha_token:'captcha'});assert.deepEqual(res.body,{ok:true});
+ await handler({method:'POST',headers:{},body:{operation:'update',password:'Abcdefg1!'}},res);assert.equal(res.statusCode,401);
+});
 import ts from 'typescript';
 test('auth templates render branded verification and recovery with escaped links',async()=>{
  const source=await readFile(new URL('../supabase/functions/auth-email/template.ts',import.meta.url),'utf8');

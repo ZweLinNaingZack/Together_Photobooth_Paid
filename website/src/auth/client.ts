@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import { readEmailCallback, cleanEmailCallback } from './emailCallback.js';
+// Remove the bearer token from browser history before any UI or third-party assets load.
+export const incomingEmailLink = readEmailCallback(location.href);
+if (incomingEmailLink) history.replaceState(history.state, '', cleanEmailCallback(location.href));
 const env = (import.meta as ImportMeta & { env: Record<string, string> }).env;
 const url = env.VITE_SUPABASE_URL, key = env.VITE_SUPABASE_PUBLISHABLE_KEY;
 function publicKey(value: string) {
