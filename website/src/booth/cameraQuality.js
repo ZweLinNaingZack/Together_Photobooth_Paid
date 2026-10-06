@@ -7,10 +7,10 @@ export async function prepareCamera(){clearTimeout(expiry);if(warm?.active)retur
 export function takePreparedCamera(){clearTimeout(expiry);const stream=warm;warm=null;return stream?.active?stream:null;}
 export function expirePreparedCamera(){expiry=setTimeout(()=>{generation++;warm?.getTracks().forEach(t=>t.stop());warm=null;},500);}
 /** @param {HTMLVideoElement|null} video @param {boolean} mirrored @param {number|null} ratio */
-export function snapshot(video,mirrored,ratio=null){
+export function snapshot(video,mirrored,ratio=null,maxEdge=1920){
  if(!video?.videoWidth||video.readyState<2)throw Error('Wait for your camera to finish warming up.');
  const sw=video.videoWidth,sh=video.videoHeight;
- const target=ratio||sw/sh,cw=Math.min(sw,sh*target),ch=cw/target,scale=Math.min(1,1920/Math.max(cw,ch));
+ const target=ratio||sw/sh,cw=Math.min(sw,sh*target),ch=cw/target,scale=Math.min(1,maxEdge/Math.max(cw,ch));
  const canvas=document.createElement('canvas');canvas.width=Math.round(cw*scale);canvas.height=Math.round(ch*scale);
  const ctx=canvas.getContext('2d');if(mirrored){ctx.translate(canvas.width,0);ctx.scale(-1,1);}ctx.drawImage(video,(sw-cw)/2,(sh-ch)/2,cw,ch,0,0,canvas.width,canvas.height);
  const data=canvas.toDataURL('image/jpeg',.95);canvas.width=canvas.height=1;return data;

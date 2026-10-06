@@ -13,6 +13,7 @@ import type { CardState } from './types';
 import { ScreenFlash, flashColors } from './ScreenFlash';
 import type { FlashColor } from './ScreenFlash';
 import {cameraConstraints,takePreparedCamera,snapshot,combinePortraits} from './cameraQuality.js';
+import {createDuoCaptures} from './duoCaptures.mjs';
 import {diagnosticReport} from './diagnostics.js';
 import {unlockCameraSound,cameraSound} from './cameraSounds.js';
 
@@ -55,20 +56,24 @@ export function SessionScreen(props: Props) {
   const [videoReady, setVideoReady] = useState(false), [remoteReady, setRemoteReady] = useState(false);
   const remoteVideo = useRef<HTMLVideoElement>(null);
   const duo = !!props.room, guest = props.room?.role === 'guest';
-  const remoteCapture=useRef<{id:string;resolve:(photo:string)=>void;reject:()=>void}|null>(null);
-  const responding=useRef(false);
+  const [syncCount,setSyncCount]=useState(0),[syncError,setSyncError]=useState('');
+  const [pendingPreviews,setPendingPreviews]=useState<Record<number,string>>({});
+  const visibleShots=[...card.shots];for(const [index,photo] of Object.entries(pendingPreviews))visibleShots[Number(index)]=photo;
   const slot=layout.slots[0],photoRatio=slot.w*layout.width/(slot.h*layout.height);
-  useEffect(()=>()=>{remoteCapture.current?.reject();remoteCapture.current=null;},[]);
+  const captureIndex=useRef(0),sendCapture=useRef<(event:DuoEvent)=>Promise<void>>(async()=>{});
+  const latestCapture=useRef({props,sound,photoRatio});latestCapture.current={props,sound,photoRatio};
+  const sync=useRef<ReturnType<typeof createDuoCaptures>|null>(null);
+  useEffect(()=>{if(!duo)return;const manager=createDuoCaptures({guest,count:layout.count,
+    snapshot:()=>{if(latestCapture.current.props.interrupted||latestCapture.current.props.visible===false)throw Error('Camera session paused.');return snapshot(video.current,latestCapture.current.props.mirror,latestCapture.current.photoRatio/2);},
+    combine:combinePortraits,send:(event:DuoEvent)=>sendCapture.current(event),
+    onPhoto:(index:number,photo:string)=>{if(alive.current){setPendingPreviews(current=>{const next={...current};delete next[index];return next;});latestCapture.current.props.onShot(index,photo);}},
+    onPreview:(index:number,photo:string)=>{if(alive.current)setPendingPreviews(current=>({...current,[index]:photo}));},
+    onPending:(count:number)=>{if(alive.current){setSyncCount(count);if(!count)setSyncError('');}},
+    onError:(error:string)=>{if(alive.current)setSyncError(error);},
+    onCaptured:()=>{if(alive.current){setShutter(value=>value+1);setFlashLit(false);if(latestCapture.current.sound)cameraSound('shutter');}}
+  });sync.current=manager;return()=>{manager.dispose();if(sync.current===manager)sync.current=null;};},[duo,guest,layout.count]);
   const peer = useDuoPeer(props.room || null, stream, event => {
-    if(event.type==='capture-local'&&guest&&typeof event.id==='string'&&event.id.length<80&&!responding.current){
-      responding.current=true;
-      try{const photo=snapshot(video.current,props.mirror,photoRatio/2);if(sound)cameraSound('shutter');void peer.send({type:'local-photo',id:event.id,photo}).catch(()=>{}).finally(()=>{responding.current=false;});}
-      catch{responding.current=false;void peer.send({type:'local-photo-failed',id:event.id}).catch(()=>{});}
-    }
-    if(!guest&&event.id===remoteCapture.current?.id){
-      if(event.type==='local-photo'&&typeof event.photo==='string'&&event.photo.startsWith('data:image/jpeg;base64,')&&event.photo.length<6000000)remoteCapture.current?.resolve(event.photo);
-      if(event.type==='local-photo-failed')remoteCapture.current?.reject();
-    }
+    sync.current?.receive(event);
     if (event.type === 'leave') props.onPartnerExit?.();
     if (event.type === 'mirror' && typeof event.value === 'boolean') setRemoteMirror(event.value);
     if (event.type === 'paused' && typeof event.value === 'boolean') { setOtherPaused(event.value); if (event.value) stopCapture(); }
@@ -84,11 +89,13 @@ export function SessionScreen(props: Props) {
     if (event.type === 'retake' && (event.index === null || Number.isInteger(event.index) && Number(event.index) >= 0 && Number(event.index) < layout.count)) props.onRemoteSession?.(event.index as number | null);
     if (event.type === 'edit') { props.onRetake(null); props.onNext(true); }
   });
+  sendCapture.current=peer.send;
   const share = (event: DuoEvent) => { if (duo && peer.connected) void peer.send(event).catch(() => {}); };
-  const ready = card.shots.filter(Boolean).length, complete = ready === layout.count;
+  const ready = visibleShots.filter(Boolean).length, complete = ready === layout.count;
   const reviewLock = useRef(false);
   async function review() {
     if (reviewLock.current) return;
+    if(sync.current?.pending()){setSyncError('Wait for the original photos to finish syncing before editing.');return;}
     reviewLock.current = true; setBusy(true);
     try {
       if (!await props.beforeReview()) return;
@@ -124,7 +131,6 @@ export function SessionScreen(props: Props) {
     } finally { if (alive.current && id === requestId.current) { requesting.current = false; setPending(false); } }
   }
   function stopCapture() {
-    remoteCapture.current?.reject();remoteCapture.current=null;
     capture.current?.abort(); capture.current = null;
     setFlashLit(false);
     setBusy(false); setCountdown(null); setStatus('Countdown stopped. Your captured photos are saved.');
@@ -143,7 +149,7 @@ export function SessionScreen(props: Props) {
   useEffect(() => { if (props.interrupted) stopCapture(); }, [props.interrupted]);
   useEffect(() => { if (duo && !props.room?.bothReady) stopCapture(); }, [duo, props.room?.bothReady]);
   useEffect(() => { share({ type: 'mirror', value: props.mirror }); }, [props.mirror, peer.connected]);
-  useEffect(() => { if (!guest && peer.connected) {void (async()=>{for(const [index,shot] of card.shots.entries())if(shot)await peer.send({type:'shot',index,shot});if(props.visible===false)await peer.send({type:'edit'});})().catch(()=>setStatus('Your earlier photos are safe. Reconnect to finish sharing them.'));} }, [peer.connected]);
+  useEffect(() => { if (!guest && peer.connected) {void (async()=>{if(sync.current?.pending()){await sync.current.retry();return;}for(const [index,shot] of card.shots.entries())if(shot)await peer.send({type:'shot',index,shot});if(props.visible===false)await peer.send({type:'edit'});})().catch(()=>setStatus('Your earlier photos are safe. Reconnect to finish sharing them.'));} }, [peer.connected]);
   useEffect(() => { share({ type: 'paused', value: props.interrupted }); }, [props.interrupted, peer.connected]);
   useEffect(() => { if (duo && !peer.connected) { stopCapture(); setRemoteBusy(false); setRemoteReady(false); } else if (peer.connected) setRemoteReady((remoteVideo.current?.readyState || 0) >= 2); }, [peer.connected]);
   useEffect(() => { props.onPartnerConnection?.(stream ? peer.connected : null); }, [peer.connected, stream, props.onPartnerConnection]);
@@ -153,22 +159,13 @@ export function SessionScreen(props: Props) {
 
   async function takeShot() {
     if(!camera.current||!canCapture)throw new Error('Wait for both cameras to be ready.');
-    const local=snapshot(video.current,props.mirror,duo?photoRatio/2:null);
-    if(sound)cameraSound('shutter');
-    if(!duo)return local;
-    const id=crypto.randomUUID();
-    const remote=new Promise<string>((resolve,reject)=>{
-      const timer=setTimeout(()=>{remoteCapture.current=null;reject(new Error('Your person’s original photo did not arrive. Your earlier photos are safe; reconnect and retake this photo.'));},25000);
-      remoteCapture.current={id,resolve:photo=>{clearTimeout(timer);remoteCapture.current=null;resolve(photo);},reject:()=>{clearTimeout(timer);remoteCapture.current=null;reject(new Error('Could not capture the other camera. Please retake this photo.'));}};
-    });
-    void peer.send({type:'capture-local',id}).then(()=>{if(alive.current){setFlashLit(false);share({type:'flash',value:false});}}).catch(()=>{if(remoteCapture.current?.id===id)remoteCapture.current.reject();});
-    const other=await remote;
-    return combinePortraits(local,other);
+    if(duo){await sync.current!.capture(captureIndex.current);return previewShot();}
+    const photo=snapshot(video.current,props.mirror);if(sound)cameraSound('shutter');return photo;
   }
   async function previewShot(){
-    const local=snapshot(video.current,props.mirror,duo?photoRatio/2:null);
+    const local=snapshot(video.current,props.mirror,duo?photoRatio/2:null,640);
     if(!duo)return local;
-    const other=snapshot(remoteVideo.current,remoteMirror,photoRatio/2);
+    const other=snapshot(remoteVideo.current,remoteMirror,photoRatio/2,640);
     return guest?combinePortraits(other,local):combinePortraits(local,other);
   }
   async function start() {
@@ -177,10 +174,10 @@ export function SessionScreen(props: Props) {
     const controller = new AbortController(); capture.current = controller;
     setBusy(true); setMessage('');
     try {
-      if (duo) { await peer.send({ type: 'busy', value: true }); await peer.send({ type: 'flashColor', value: props.flashColor }); }
-      await captureSequence({ shots: card.shots, count: layout.count, retake, method, seconds, signal: controller.signal, takeShot,
-        onShutter: () => { setShutter(value => value + 1); share({ type: 'shutter' }); }, flash: props.flash, onFlash: (lit: boolean) => { if (alive.current && capture.current === controller) { setFlashLit(lit); share({ type: 'flash', value: lit }); } },
-        onShot: async (index: number, shot: string) => { if (!controller.signal.aborted && alive.current) props.onShot(index, shot); if (duo) await peer.send({ type: 'shot', index, shot }); }, onCountdown: (value: number | string | null) => { setCountdown(value); share({ type: 'countdown', value }); }, onTaking: (index: number) => setStatus(`Taking photo ${index + 1} of ${layout.count}`) });
+      if (duo) await Promise.all([peer.send({ type: 'busy', value: true }),peer.send({ type: 'flashColor', value: props.flashColor })]);
+      await captureSequence({ shots: visibleShots, count: layout.count, retake, method, seconds, signal: controller.signal, takeShot,
+        onShutter: () => { if(!duo)setShutter(value => value + 1); }, flash: props.flash, onFlash: (lit: boolean) => { if (alive.current && capture.current === controller) { setFlashLit(lit); share({ type: 'flash', value: lit }); } },
+        onShot: async (index: number, shot: string) => { if (!controller.signal.aborted && alive.current){if(duo)sync.current?.preview(index,shot);else props.onShot(index,shot);} }, onCountdown: (value: number | string | null) => { setCountdown(value); share({ type: 'countdown', value }); }, onTaking: (index: number) => {captureIndex.current=index;setStatus(`Taking photo ${index + 1} of ${layout.count}`);} });
       if (!controller.signal.aborted && alive.current) { props.onRetake(null); setStatus('Photo saved. Reorder, retake, or continue when you’re ready.'); }
     } catch (error) {
       if (!controller.signal.aborted && alive.current) setMessage(error instanceof Error ? error.message : 'Could not take the photo. Please try again.');
@@ -212,9 +209,11 @@ export function SessionScreen(props: Props) {
         {props.flash && <p className="flash-note">Your screen lights up just before each photo. Keep your screen bright and your face close for more light.</p>}
       </div>
       <p id="session-status" aria-live="polite">{guest ? remoteBusy ? 'Your creator is taking your shared photos…' : complete ? 'Your photos are ready. Your creator can take you both to export.' : 'Ready when your creator is.' : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
-<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{duo ? 'Leave session' : 'Change layout'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null} onClick={review}>Continue to editing</button></div>
+<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{duo ? 'Leave session' : 'Change layout'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="secondary" hidden={guest} disabled={locked || syncCount>0 || !complete || retake !== null} onClick={review}>Continue to editing</button></div>
       {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={previewShot} retake={retake} />}
-      <PhotoTray shots={card.shots} count={layout.count} retake={retake} disabled={locked || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
+      {duo&&syncCount>0&&<p className="session-note" role="status">Finishing {syncCount} high-quality photo{syncCount===1?'':'s'} in the background. You can take the next photo; editing unlocks when both copies are ready.</p>}
+      <WarningNotice title="Photo sync">{syncError&&<><p>{syncError}</p><button className="outline-button" disabled={!peer.connected} onClick={()=>{setSyncError('');void sync.current?.retry();}}>Retry photo sync</button>{!guest&&<button className="text-button" disabled={!peer.connected||busy} onClick={()=>{props.onRetake(sync.current?.pendingIndex()??null);setSyncError('');}}>Retake unsynced photo</button>}</>}</WarningNotice>
+      <PhotoTray shots={visibleShots} count={layout.count} retake={retake} disabled={locked || syncCount>0 || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
     </div>
   </>;
 }

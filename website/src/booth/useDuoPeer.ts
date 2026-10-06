@@ -35,6 +35,8 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
   useEffect(() => {
     if (!room || !stream) return;
     let stopped = false, pc: RTCPeerConnection | null = null;
+    let control: RTCDataChannel | null = null;
+    const channelsOpen=()=>channel?.readyState==='open'&&control?.readyState==='open';
     let channel: RTCDataChannel | null = null, session = '', guestId = '';
     let config: RtcConfig | null = null;
     let transport: ReturnType<typeof createCameraTransport> | null = null;
@@ -52,7 +54,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       if (stopped || recoveryTimer || automaticRetries.current >= 2) return;
       recoveryTimer = setTimeout(() => {
         recoveryTimer = undefined;
-        if (stopped || pc?.connectionState === 'connected' && channel?.readyState==='open') return;
+        if (stopped || pc?.connectionState === 'connected' && channelsOpen()) return;
         automaticRetries.current++;
         recordDiagnostic('camera_retry');
         setAttempt(value => value + 1);
@@ -63,20 +65,20 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
     const signal = (message: Signal) => transport?.send({ ...message, generation: message.type === 'hello' ? startedAt : negotiationGeneration, id: crypto.randomUUID() }) ?? Promise.resolve();
     function closePeer() {
-      channel?.close(); pc?.close(); channel = null; pc = null; incoming.clear();
+      channel?.close(); control?.close(); control=null; pc?.close(); channel = null; pc = null; incoming.clear();
       for (const waiter of acknowledgments.values()) waiter.reject(new Error('Camera connection closed.'));
       acknowledgments.clear(); setRemote(null); setConnected(false);
     }
     function attach(next: RTCDataChannel) {
-      channel = next;
-      next.onopen = () => { if (!stopped && channel === next) { connectedAfter = Date.now() - startedAt; recordDiagnostic('camera_connected',connectedAfter);setConnected(true); setError(''); setPhase('Your cameras are connected'); } };
-      next.onclose = () => { if (!stopped && channel === next) { setConnected(false); setPhase('Reconnecting your cameras');recover(); } };
+      if(next.label==='together-control')control=next;else channel=next;
+      next.onopen = () => { if (!stopped && channelsOpen()) { connectedAfter = Date.now() - startedAt; recordDiagnostic('camera_connected',connectedAfter);setConnected(true); setError(''); setPhase('Your cameras are connected'); } };
+      next.onclose = () => { if (!stopped && (channel === next || control === next)) { setConnected(false); setPhase('Reconnecting your cameras');recover(); } };
       next.onmessage = event => {
-        if (stopped || channel !== next || typeof event.data !== 'string' || event.data.length > 16000) return;
+        if (stopped || (channel !== next && control !== next) || typeof event.data !== 'string' || event.data.length > 16000) return;
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'ack') { acknowledgments.get(message.id)?.resolve(); acknowledgments.delete(message.id); return; }
-          if (message.type === 'begin' && typeof message.id === 'string' && Number.isInteger(message.size) && message.size > 0 && message.size <= 6000000 && incoming.size < 2) incoming.set(message.id, { size: message.size, data: '' });
+          if (message.type === 'begin' && typeof message.id === 'string' && Number.isInteger(message.size) && message.size > 0 && message.size <= 6000000 && incoming.size < 4) incoming.set(message.id, { size: message.size, data: '' });
           if (message.type === 'part') {
             const item = incoming.get(message.id);
             if (!item || typeof message.data !== 'string') return;
@@ -93,14 +95,15 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       };
     }
     sender.current = event => {
-      const task = outgoing.then(async () => {
-        const active = channel, data = JSON.stringify(event), id = crypto.randomUUID();
+      const data=JSON.stringify(event),small=data.length<12000&&!['capture-original','shot','photos'].includes(event.type);
+      const task = (small?Promise.resolve():outgoing).then(async () => {
+        const active = small?control:channel, id = crypto.randomUUID();
         if (stopped || active?.readyState !== 'open') throw new Error('Wait for both cameras to connect.');
         if (data.length > 6000000) throw new Error('This photo is too large to share. Please try again.');
         const deadline = Date.now() + 20000;
         active.send(JSON.stringify({ type: 'begin', id, size: data.length }));
         for (let offset = 0; offset < data.length; offset += 12000) {
-          while (active.bufferedAmount > 256000) {
+          while (active.bufferedAmount > 64000) {
             if (stopped || active.readyState !== 'open' || Date.now() > deadline) throw new Error('Photo sharing paused. Reconnect and retake this photo.');
             await new Promise(resolve => setTimeout(resolve, 40));
           }
@@ -116,7 +119,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
           } else active.send(JSON.stringify({ type: 'part', id, data: data.slice(offset, offset + 12000) }));
         }
       });
-      outgoing = task.catch(report);
+      if(!small)outgoing = task.catch(report);
       return task;
     };
     function createPeer(id: string) {
@@ -135,7 +138,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         for(const sender of next.getSenders())if(sender.track?.kind==='video'){
           const params=sender.getParameters();
           if(!params.encodings?.length)continue;
-          params.encodings=params.encodings.map(encoding=>({...encoding,maxBitrate:700000,maxFramerate:24,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/640)}));
+          params.encodings=params.encodings.map(encoding=>({...encoding,maxBitrate:3500000,maxFramerate:30,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/1280)}));
           void sender.setParameters(params).catch(()=>{});
         }
       };
@@ -145,7 +148,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         if (stopped || pc !== next) return;
         if (next.connectionState === 'failed' || next.connectionState === 'disconnected') { setConnected(false); setError(config?.relayConfigured ? 'The camera connection was interrupted. Try reconnecting your cameras.' : 'The cameras could not connect directly. This booth still needs a TURN relay for networks that block direct connections.'); }
         if (next.connectionState === 'failed' || next.connectionState === 'disconnected') recover();
-        if (next.connectionState === 'connected' && channel?.readyState === 'open') { setConnected(true); setError(''); }
+        if (next.connectionState === 'connected' && channelsOpen()) { setConnected(true); setError(''); }
       };
       next.oniceconnectionstatechange = () => {
         if (stopped || pc !== next) return;
@@ -175,7 +178,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         void signal({ type: 'answer', session, description: { type: 'answer', sdp: pc.localDescription.sdp } }).catch(report);
       } else if (message.type === 'hello' && room!.role === 'host' && (guestId !== message.session || !pc?.localDescription)) {
         guestId = message.session;
-        const next = createPeer(crypto.randomUUID()); attach(next.createDataChannel('together'));
+        const next = createPeer(crypto.randomUUID()); attach(next.createDataChannel('together')); attach(next.createDataChannel('together-control'));
         await next.setLocalDescription(await next.createOffer());
         if (!stopped) void signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: next.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session !== session && message.description?.type === 'offer') {
@@ -243,8 +246,8 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       announce();
     }).catch(report);
     const timeout = setTimeout(() => {
-      if (!stopped && pc?.connectionState !== 'connected') {
-        setError(current => current || 'The camera handshake is taking longer than expected. Retrying the connection; keep both camera pages open.');
+      if (!stopped && (pc?.connectionState !== 'connected' || !channelsOpen())) {
+        setError(current => current || (pc?.connectionState === 'connected' ? 'The photo controls could not connect. Refresh both devices to use the latest booth version, then reconnect.' : 'The camera handshake is taking longer than expected. Retrying the connection; keep both camera pages open.'));
         if (config) recover();
       }
     }, 25000);
