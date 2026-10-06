@@ -94,3 +94,47 @@
 .password-requirements li[data-met="true"] { color:#286044; }
 .account-security { margin-top:24px; padding:24px; border:1px solid #d8d9cc; border-radius:16px; }
 .account-security h2 { font-size:1.3rem; }
+
+/* Consistent vertical rhythm across account, checkout and review screens. */
+.account-panel :is(h2,h3){line-height:1.3;text-wrap:balance}
+.account-panel label{line-height:1.5}
+.account-panel fieldset>p[role="status"]{margin:18px 0;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#faf8f2;font-size:14px;line-height:1.6}
+.account-panel fieldset>.primary{margin-top:20px}
+.account-panel fieldset>p[role="status"]+.primary{margin-top:0}
+.account-links{gap:12px;margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
+.account-links .text-button{line-height:1.6;padding:8px 12px}
+.password-requirements{margin-top:14px;line-height:1.6}
+.password-requirements li{margin-block:8px}
+.account-security{padding:28px;display:flex;flex-direction:column;align-items:flex-start;gap:16px}
+.account-security h2,.account-security p{margin:0}
+.account-security p{max-width:65ch;line-height:1.7;color:var(--muted)}
+.account-security>div{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:20px;padding-top:8px}
+.account-security .primary{width:auto;max-width:100%}
+.dashboard-card>p+p{margin-top:12px}
+.dashboard-card>p+.primary{margin-top:20px}
+.purchase-card>h3{margin-top:0;margin-bottom:16px}
+.topup-notice{margin:20px 0;padding:16px 18px;line-height:1.75}
+.topup-checkout{margin-top:28px;padding-top:24px;border-top:1px solid var(--line)}
+.topup-checkout>h3{margin:24px 0 16px}
+.topup-checkout>p{margin:0 0 24px;line-height:1.75}
+.checkout-columns{gap:32px}
+.checkout-columns>div{min-width:0}
+.checkout-columns>div>p{margin-top:12px;line-height:1.75}
+.checkout-columns>div>a{display:inline-block;margin-top:4px;padding:8px 0;line-height:1.5}
+.receipt-upload{padding:24px}
+.receipt-upload label{margin-bottom:24px}
+.receipt-upload small{line-height:1.7;margin-top:12px}
+.receipt-upload .primary{margin-top:24px;line-height:1.5;white-space:normal}
+.payment-review>p{margin:12px 0;line-height:1.7}
+.payment-review>small{margin-bottom:20px}
+.payment-review>label{margin-top:20px}
+.payment-list li{padding-block:18px;line-height:1.7}
+.payment-list li>small{margin-block:8px}
+.point-picker>p{margin-top:24px}
+@media(max-width:700px){
+ .account-security{padding:22px 20px;gap:16px}
+ .account-security>button,.account-security .primary{width:100%;white-space:normal;line-height:1.5}
+ .checkout-columns{gap:28px}
+ .receipt-upload{padding:20px 16px}
+ .topup-checkout>button{max-width:100%;white-space:normal;line-height:1.5}
+}
