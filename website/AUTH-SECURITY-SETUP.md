@@ -2,6 +2,10 @@
 
 Deployment does not automatically change hosted Supabase Auth settings.
 
+## Remaining attempts and restored countdown
+
+Run `015-login-attempts.sql` after 013, then deploy the latest website code. The server reports remaining attempts for invalid credentials without revealing account existence. The fifth failure locks the email and IP for five minutes. Changing IP does not clear the email lock. The browser caches only the lock expiry for immediate display after reopening; database enforcement remains authoritative even if storage is cleared. A cleared cache receives the remaining lock on the next login request. CAPTCHA and provider errors do not count as incorrect passwords. No email-function redeployment is needed for this update.
+
 ## Free-plan deployment and email-link correction
 
 - Run 013 for the website limiter, but **skip the Password Verification hook** on Free/Pro (Teams/Enterprise only). The gateway limits website logins; direct Supabase calls retain its native protections.

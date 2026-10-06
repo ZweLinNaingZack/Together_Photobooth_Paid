@@ -22,6 +22,11 @@ export function makeLoginHandler({env=process.env,fetcher=fetch,clientFactory=cr
   const result=await response.json();
   const seconds=await limit(response.ok?'success':result.error_code==='invalid_credentials'?'failure':'release');acquired=false;
   if(seconds)return limited(seconds);
+  if(!response.ok&&result.error_code==='invalid_credentials'){
+   const {data:attemptsRemaining,error}=await db.rpc('together_login_attempts_remaining',{keys});
+   if(error)throw error;
+   return res.status(400).json({code:'invalid_credentials',attemptsRemaining,message:`Incorrect email or password. ${attemptsRemaining} attempt${attemptsRemaining===1?'':'s'} remaining.`});
+  }
   if(!response.ok){const hookLock=String(result.msg||result.message||result.error_description||'').match(/together_login_locked:(\d+)/);if(hookLock)return limited(Math.max(1,Math.min(300,Number(hookLock[1])-Math.floor(Date.now()/1000))));if(response.status===429)return limited(60);return res.status(response.status>=500?503:400).json({code:result.error_code,message:result.error_code==='email_not_confirmed'?'Please confirm your email before signing in.':'Sign-in failed. Check your details and try again.'});}
   return res.status(200).json({access_token:result.access_token,refresh_token:result.refresh_token});
  }catch{return res.status(503).json({message:'Sign-in is temporarily unavailable. Please try again.'});}

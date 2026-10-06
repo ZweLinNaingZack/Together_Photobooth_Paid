@@ -4,6 +4,13 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {strongPassword} from '../src/auth/passwordPolicy.js';
 import {makeLoginHandler} from '../api/password-login.mjs';
+import {readLoginLock,saveLoginLock} from '../src/auth/loginCountdown.js';
+test('countdown survives a new browser view and uses elapsed wall time',()=>{
+ const values=new Map();const storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ saveLoginLock(storage,301000);assert.equal(readLoginLock(storage,121000),301000);
+ assert.equal(readLoginLock(storage,302000),0);saveLoginLock(storage,0);assert.equal(readLoginLock(storage,1000),0);
+ assert.equal(readLoginLock({getItem(){throw Error('blocked');}}),0);
+});
 import {makeAccountHandler} from '../api/password-account.mjs';
 import {readEmailCallback,cleanEmailCallback} from '../src/auth/emailCallback.js';
 test('signup and reset reject weak passwords before contacting Supabase',async()=>{
@@ -60,8 +67,10 @@ test('shared limiter locks fifth failure, resets on success and expires',async()
  const db=new PGlite();try{
  await db.exec('create role anon;create role authenticated;create role service_role;create role supabase_auth_admin;');
  await db.exec(await readFile(new URL('../013-login-security.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../015-login-attempts.sql',import.meta.url),'utf8'));
  const call=async op=>(await db.query('select together_login_limit($1,$2) as seconds',[['email:alice','ip:one'],op])).rows[0].seconds;
- for(let i=1;i<=5;i++){assert.equal(await call('begin'),0);assert.equal(await call('failure'),i===5?300:0);}
+ for(let i=1;i<=5;i++){assert.equal(await call('begin'),0);assert.equal(await call('failure'),i===5?300:0);assert.equal((await db.query('select together_login_attempts_remaining($1) as n',[['email:alice','ip:one']])).rows[0].n,5-i);}
+ assert.equal((await db.query('select together_login_limit($1,$2) as n',[['email:alice','ip:new-wifi'],'begin'])).rows[0].n,300,'changing IP does not bypass email lock');
  assert.equal(await call('begin'),300);
  await db.exec("update together_login_limits set locked_until=now()-interval '1 second'");
  assert.equal(await call('begin'),0);assert.equal(await call('success'),0);
