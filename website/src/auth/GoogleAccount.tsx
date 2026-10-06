@@ -6,6 +6,7 @@ import { authRedirect, googleAvailable, supabase } from './client';
 import { Wallet } from './Wallet';
 import './account.css';
 import { readBoothReturn } from './inviteReturn.js';
+import { SecuritySettings } from './SecuritySettings';
 
 // Google-only test phase. Account.tsx retains the email flows for later use.
 export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy' | 'admin' }) {
@@ -45,6 +46,7 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
     <div className="account-panel">
       {loading ? <p role="status">Checking your account…</p> : !supabase ? <WarningNotice>Sign-in is not configured yet. Please try again later.</WarningNotice> : user ? <>
         <Wallet key={user.id} userId={user.id} page={page} />
+        {page === 'overview' && <SecuritySettings email={user.email || ''} />}
         <div className="account-footer-actions">
         <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional hint. */ } }}>Take the photos now</a>
         <button className="signout-button" disabled={busy} onClick={() => setSignout(true)}>Sign out</button>
