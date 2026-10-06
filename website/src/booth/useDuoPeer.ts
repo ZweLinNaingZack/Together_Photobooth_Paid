@@ -4,6 +4,7 @@ import type { RoomSession } from './rooms';
 import { createCameraTransport } from './cameraTransport.mjs';
 import { connectionRetry } from './connectionRetry.mjs';
 import { supabase } from '../auth/client';
+import {recordDiagnostic} from './diagnostics.js';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
 type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
@@ -51,13 +52,14 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       if (stopped || recoveryTimer || automaticRetries.current >= 2) return;
       recoveryTimer = setTimeout(() => {
         recoveryTimer = undefined;
-        if (stopped || pc?.connectionState === 'connected') return;
+        if (stopped || pc?.connectionState === 'connected' && channel?.readyState==='open') return;
         automaticRetries.current++;
+        recordDiagnostic('camera_retry');
         setAttempt(value => value + 1);
       }, 3000);
     };
     setRemote(null); setConnected(false); setError('');
-    const report = (e: unknown) => { if (!stopped) setError(e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'); };
+    const report = (e: unknown) => { if (!stopped) {const reference=recordDiagnostic('camera_failed',Date.now()-startedAt);setError(`${e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'} Support reference: ${reference}.`);} };
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
     const signal = (message: Signal) => transport?.send({ ...message, generation: message.type === 'hello' ? startedAt : negotiationGeneration, id: crypto.randomUUID() }) ?? Promise.resolve();
     function closePeer() {
@@ -67,8 +69,8 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     }
     function attach(next: RTCDataChannel) {
       channel = next;
-      next.onopen = () => { if (!stopped && channel === next) { connectedAfter = Date.now() - startedAt; setConnected(true); setError(''); setPhase('Your cameras are connected'); } };
-      next.onclose = () => { if (!stopped && channel === next) { setConnected(false); setError('Your person’s camera connection closed. Reconnect to continue.'); } };
+      next.onopen = () => { if (!stopped && channel === next) { connectedAfter = Date.now() - startedAt; recordDiagnostic('camera_connected',connectedAfter);setConnected(true); setError(''); setPhase('Your cameras are connected'); } };
+      next.onclose = () => { if (!stopped && channel === next) { setConnected(false); setPhase('Reconnecting your cameras');recover(); } };
       next.onmessage = event => {
         if (stopped || channel !== next || typeof event.data !== 'string' || event.data.length > 16000) return;
         try {
@@ -125,7 +127,18 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         // After a failed direct attempt, use the configured relay explicitly.
         iceTransportPolicy: automaticRetries.current > 0 && config.relayConfigured ? 'relay' : 'all',
       }); pc = next;
-      stream!.getTracks().forEach(track => next.addTrack(track, stream!));
+      stream!.getTracks().forEach(track => next.addTrack(track,stream!));
+      // Apply after negotiation so the browser's negotiated encodings and
+      // transceiver pairing are preserved on both the offer and answer sides.
+      next.onsignalingstatechange=()=>{
+        if(next.signalingState!=='stable'||!next.localDescription)return;
+        for(const sender of next.getSenders())if(sender.track?.kind==='video'){
+          const params=sender.getParameters();
+          if(!params.encodings?.length)continue;
+          params.encodings=params.encodings.map(encoding=>({...encoding,maxBitrate:700000,maxFramerate:24,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/640)}));
+          void sender.setParameters(params).catch(()=>{});
+        }
+      };
       next.ontrack = event => { if (!stopped && pc === next) setRemote(event.streams[0] || new MediaStream([event.track])); };
       next.onicecandidate = event => { if (!stopped && pc === next && event.candidate) void signal({ type: 'candidate', session: id, candidate: event.candidate.toJSON() }).catch(report); };
       next.onconnectionstatechange = () => {
@@ -236,8 +249,10 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       }
     }, 25000);
     const hide = () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
+    const online=()=>{if(!stopped&&pc?.connectionState!=='connected'){automaticRetries.current=0;recover();}};
     window.addEventListener('pagehide', hide);
-    return () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide); };
+    window.addEventListener('online',online);
+    return () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide);window.removeEventListener('online',online); };
   }, [room?.token, stream, attempt]);
   return { remote, connected, error, phase, diagnostics, reconnect: () => { automaticRetries.current = 0; setAttempt(value => value + 1); }, send: (event: DuoEvent) => sender.current(event) };
 }

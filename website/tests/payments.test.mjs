@@ -93,6 +93,17 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     assert.equal((await wallet()).points,100);
     assert.equal((await complete(extra,'TESTAA')).used_trial,true, 'same room cannot charge twice with a new request ID');
     await complete(paid); await complete(paid);
+    await db.exec('reset role');
+    await db.exec(await readFile(new URL('../016-resume-session.sql',import.meta.url),'utf8'));
+    const resume=async id=>(await db.query('select together_resume_session($1) as receipt',[id])).rows[0].receipt;
+    await as(alice);
+    assert.equal((await resume(paid)).completed,true);
+    assert.equal((await resume(paid)).used_trial,false);
+    assert.equal((await resume(free)).used_trial,true);
+    assert.equal(await resume(extra),null,'an uncharged ID cannot restore paid editing');
+    await as(bob);assert.equal(await resume(paid),null,'another user cannot restore a paid session');
+    await as('','anon');await assert.rejects(()=>resume(paid),/permission denied/);
+    await as(alice);
     assert.equal((await wallet()).points,0);
     assert.equal((await wallet()).history.filter(row => row.kind === 'session').length,1);
     await assert.rejects(() => complete(extra), /need 100 points/);

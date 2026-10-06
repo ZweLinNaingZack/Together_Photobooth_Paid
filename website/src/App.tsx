@@ -1,11 +1,11 @@
 import { DecorativeIcon } from './components/DecorativeIcon';
-import { useEffect, useRef, useState } from 'react';
-import { Account } from './auth/Account';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+const Account = lazy(() => import('./auth/Account').then(m=>({default:m.Account})));
 import { useAuth } from './auth/AuthProvider';
 import { SignInDialog } from './components/SignInDialog';
 import { Home } from './pages/Home';
-import { About } from './pages/About';
-import { Booth } from './booth/Booth';
+const About = lazy(() => import('./pages/About').then(m=>({default:m.About})));
+const Booth = lazy(() => import('./booth/Booth').then(m=>({default:m.Booth})));
 import { rememberBoothReturn, consumeBoothReturn } from './auth/inviteReturn.js';
 
 export function App() {
@@ -13,8 +13,10 @@ export function App() {
   const [hash, setHash] = useState(window.location.hash);
   const leaveGuard = useRef<(proceed: () => void) => void>(proceed => proceed());
   const currentHash = useRef(window.location.hash);
+  const [boothOpened,setBoothOpened]=useState(false);
   const isBooth = hash === '#booth' || hash.startsWith('#booth?'), isAbout = hash === '#about', isAccount = ['#account', '#account/buy', '#account/admin'].includes(hash);
   const invite = isBooth ? new URLSearchParams(hash.split('?')[1] || '').get('invite') : null;
+  useEffect(()=>{if(isBooth&&user)setBoothOpened(true);},[isBooth,user]);
   useEffect(() => { if(!loading && !user && isBooth) rememberBoothReturn(hash); }, [loading,user,isBooth,hash]);
   useEffect(() => { if(!loading && user && !recovery && !emailLink && !authError && isAccount && hash !== '#account/admin') { const target=consumeBoothReturn(); if(target) window.location.hash=target; } }, [loading,user,recovery,emailLink,authError,isAccount,hash]);
   useEffect(() => {
@@ -43,15 +45,15 @@ export function App() {
   return <>
     <a className="skip-link" href="#main">Skip to content</a>
     <header className="header"><a className="wordmark" href="#" aria-label="Together home">together<span className="brand-dot"><DecorativeIcon /></span></a><nav aria-label="Main navigation"><a href="#how-it-works" className="home-nav" hidden={isBooth}>How it works</a><a href="#about" className="about-nav" aria-current={isAbout ? 'page' : undefined}>About</a><a href="#account" className="account-nav" aria-current={isAccount ? 'page' : undefined}>{user ? 'My account' : 'Sign in'}</a></nav></header>
-    <main id="main">
+    <main id="main"><Suspense fallback={<p className="session-note" role="status">Preparing your next moment…</p>}>
       {(!isBooth && !isAbout && !isAccount || isBooth && !user) && <Home />}
       {isAccount && <Account page={hash === '#account/buy' ? 'buy' : hash === '#account/admin' ? 'admin' : 'overview'} />}
       {isAbout && <About />}
       {loading && isBooth && <p role="status">Checking your account…</p>}
-      {!loading && user && <Booth key={user.id} active={isBooth} invite={invite} leaveGuard={leaveGuard} />}
+      {!loading && user && (isBooth||boothOpened) && <Booth key={user.id} active={isBooth} invite={invite} leaveGuard={leaveGuard} />}
       {!loading && !user && isBooth && <SignInDialog onDismiss={() => { consumeBoothReturn(); window.location.hash = ''; }} onSignIn={() => {
         rememberBoothReturn(hash);
       }} />}
-    </main>
+    </Suspense></main>
   </>;
 }

@@ -26,12 +26,19 @@ import { useSessionCharge } from './useSessionCharge';
 import './journey.css';
 import { prefetchFrames } from './frameAssets';
 import { reconcileOffsets } from './photoPosition.js';
+import { useAuth } from '../auth/AuthProvider';
+import { readDraft,saveDraft,deleteDraft } from './recoveryStore.js';
 
 const progress: [Step, string][] = [['mode', 'Solo or duo'], ['source', 'Photo source'], ['layout', 'Your layout'], ['session', 'Your photos'], ['design', 'Frame & filter'], ['export', 'Export & download']];
 
 export function Booth({ active, invite, leaveGuard }: { active: boolean; invite: string | null; leaveGuard: RefObject<(proceed: () => void) => void> }) {
   const party = useRoom();
   const charge = useSessionCharge();
+  const {user}=useAuth();
+  const [saveRecovery,setSaveRecovery]=useState(false),[savedDraft,setSavedDraft]=useState<any>(null),[recoveryMessage,setRecoveryMessage]=useState('');
+  const [restored,setRestored]=useState(false);
+  const recoveredGuest=useRef(false);
+  const recoveryWrites=useRef(Promise.resolve());
   const duoControl = useRef<((event: DuoEvent) => Promise<void>) | null>(null);
   const [sharedError, setSharedError] = useState('');
   const [useInvite, setUseInvite] = useState(true);
@@ -54,7 +61,21 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const [editingApproved, setEditingApproved] = useState(false);
   const [confirmation, setConfirmation] = useState({open:false,busy:false,error:''});
   const billing = useRef<() => Promise<void>>(async () => {});
-  billing.current = () => party.room?.role === 'guest' ? Promise.resolve() : charge.complete(party.room?.code || null);
+  billing.current = async () => {
+    if(party.room?.role==='guest')return;
+    if(saveRecovery&&user){await persistRecovery(true);}
+    await charge.complete(party.room?.code||null);
+  };
+  function persistRecovery(required=false){
+    if(!user||!card.shots.length||!card.shots.every(Boolean))return Promise.resolve();
+    const guest=party.room?.role==='guest'||restored&&recoveredGuest.current;
+    if(guest&&!editingApproved)return Promise.resolve();
+    const draft={card,source,mode,sessionId:charge.sessionId,guest};
+    const task=recoveryWrites.current.catch(()=>{}).then(()=>saveDraft(user.id,draft));recoveryWrites.current=task;
+    return task.then(()=>setRecoveryMessage('Recovery copy saved on this device for 24 hours.')).catch(()=>{setRecoveryMessage('This browser could not save recovery. Keep this tab open until you download.');if(required)throw new Error('Recovery could not be saved. Free some device storage or turn off recovery before continuing. No new charge was made.');});
+  }
+  useEffect(()=>{if(user)void readDraft(user.id).then(setSavedDraft).catch(()=>{});},[user?.id]);
+  useEffect(()=>{if(saveRecovery&&hasPhotos)void persistRecovery();},[card,saveRecovery,editingApproved]);
   const editingGate = useRef<ReturnType<typeof createEditingConfirmation> | null>(null);
   if (!editingGate.current) editingGate.current = createEditingConfirmation(() => billing.current(), setConfirmation);
   useEffect(() => () => editingGate.current?.dispose(), []);
@@ -71,7 +92,9 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const disconnectOpen = active && partnerLost && !disconnectAcknowledged && !pendingLeave;
   const duoActive = !!party.room || mode === 'duo' && ['session','upload','design','export'].includes(step);
   function requestEditing() { return editingApproved || !!charge.receipt ? Promise.resolve(true) : editingGate.current!.request().then(Boolean); }
-  function clearPhotos() {
+  function clearPhotos(removeSaved=true) {
+    setRestored(false);
+    if(removeSaved&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setSavedDraft(null);setRecoveryMessage('');}
     editingGate.current?.cancel(); setConfirmation({open:false,busy:false,error:''}); setEditingApproved(false);
     charge.reset();
     setCard(current => ({ ...current, shots: [], offsets: [] }));
@@ -115,7 +138,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   }, [hasPhotos, duoActive, active]);
   useEffect(() => {
     // Clear on actual page departure too, including pages restored from browser cache.
-    const clearOnDeparture = () => { editingGate.current?.dispose(); clearPhotos(); setPendingLeave(null); setStep('mode'); setInstructions(false); };
+    const clearOnDeparture = () => { editingGate.current?.dispose(); clearPhotos(false); setPendingLeave(null); setStep('mode'); setInstructions(false); };
     window.addEventListener('pagehide', clearOnDeparture);
     return () => window.removeEventListener('pagehide', clearOnDeparture);
   }, []);
@@ -124,6 +147,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   useEffect(() => { if (active && !instructions) { screen.current?.querySelector('h1')?.focus({ preventScroll: true }); window.scrollTo(0, 0); } }, [step, active, instructions]);
   const change = (patch: Partial<CardState>) => setCard(current => ({ ...current, ...patch, ...(patch.shots ? { offsets: reconcileOffsets(current.shots, current.offsets, patch.shots) } : {}) }));
   async function reviewUploads(shots = card.shots) {
+    change({shots});
     if (await requestEditing()) { change({ shots }); setEditingApproved(true); setRetake(null); setStep('design'); }
   }
   const reorder = (from: number, to: number) => {
@@ -182,6 +206,8 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       <div className="flow-top"><a href="#" className="back-link">Leave the booth</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>How it works</button></div>
       <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
+        {active&&savedDraft&&<div className="session-note"><p>A previous photocard is saved on this device.</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:'Could not resume.');}}}>Resume saved editing</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError("Could not delete the saved copy. Please try again."));setSavedDraft(null);}}>Delete saved copy</button><WarningNotice>{sharedError}</WarningNotice></div>}
+        {active&&['session','upload','design','export'].includes(step)&&<div className="session-note"><label><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setRecoveryMessage('Saved copy removed.');}}}/> Save recovery on this device for 24 hours</label><p>Optional. Photos stay on this device. Explicitly leaving the booth deletes the saved copy. Expired copies are removed when you return.</p><p role="status">{recoveryMessage}</p></div>}
         {active && !confirmation.open && charge.error && <WarningNotice title="Before you continue"><p>{charge.error}</p><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></WarningNotice>}
         {active && ['session','upload','design','export'].includes(step) && <div className="session-note" aria-live="polite">
           {party.room?.role === 'guest' ? 'Your creator covers this session. No points or free trial are used from your account.' : charge.busy ? 'Confirming your session…' : charge.receipt || 'Nothing is deducted until you confirm that you’re ready to edit. Your free trial is used first, otherwise 100 points.'}
@@ -196,10 +222,10 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
           beforeReview={requestEditing} onShot={(index, shot) => setCard(current => ({ ...current, shots: replaceShot(current.shots, index, shot), offsets: reconcileOffsets(current.shots, current.offsets, replaceShot(current.shots, index, shot)) }))} onMove={reorder} onBack={() => goBack('layout')} onNext={wasCamera => { setRestoreCamera(wasCamera); setRetake(null); setEditingApproved(true); setStep('design'); }} /></div>}
         {active && step === 'upload' && mode === 'solo' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('layout')} onNext={() => void reviewUploads()} />}
         {active && step === 'upload' && mode === 'duo' && <DuoUploadScreen card={card} photos={duoUploads} onPhotos={setDuoUploads} onBack={() => goBack('layout')} onNext={shots => void reviewUploads(shots)} />}
-        {active && editingApproved && (step === 'design' || step === 'export') && <><EditScreen stage={step} onContinue={() => setStep('export')} photosLocked={party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => void retakeFromEdit(null)} onDesign={() => setStep('design')} /><WarningNotice>{sharedError}</WarningNotice></>}
+        {active && editingApproved && (step === 'design' || step === 'export') && <><EditScreen stage={step} onContinue={() => setStep('export')} photosLocked={restored || party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => void retakeFromEdit(null)} onDesign={() => setStep('design')} /><WarningNotice>{sharedError}</WarningNotice></>}
       </div>
     </section>
-    <Instructions open={active && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
+    <Instructions open={active && !savedDraft && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
     <div id="print-sheet" aria-hidden="true" />
     <LeaveDialog duo={duoActive} open={!!pendingLeave} count={duoUploads.some(Boolean) ? duoUploads.filter(Boolean).length : card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); void duoControl.current?.({type:'leave'}).catch(() => {}); clearPhotos(); proceed?.(); }} />
     <BoothDialog open={active && confirmation.open && !disconnectOpen && !pendingLeave} title="Proceed to Editing?" cancelLabel="Retake / Cancel" confirmLabel={charge.cost === 0 ? 'Confirm & Use Free Trial' : 'Confirm & Deduct Points'} busy={confirmation.busy} error={confirmation.error} onCancel={() => editingGate.current?.cancel()} onConfirm={() => void editingGate.current?.confirm()}>

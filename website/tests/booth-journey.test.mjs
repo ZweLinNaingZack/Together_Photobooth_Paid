@@ -12,7 +12,7 @@ import {reconcileOffsets} from '../src/booth/photoPosition.js';
 const compiled=ts.transpileModule(await readFile(new URL('../src/booth/Booth.tsx',import.meta.url),'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022},
 }).outputText;
-function harness({cost=100,role='host',invite=null}={}) {
+function harness({cost=100,role='host',invite=null,user=null,draft=null,storageFailure=false}={}) {
   const cells=[], hooks=[]; let cursor=0, dirty=false, effects=[], tree, debits=0, commit;
   const charge={cost,busy:false,error:'',receipt:'',reserve:async()=>{},reset:()=>{},complete:()=>{debits++;return new Promise(resolve=>{commit=()=>{charge.receipt='Confirmed';resolve();};});}};
   const party={room:null,busy:false,error:'',ended:false,
@@ -29,6 +29,8 @@ function harness({cost=100,role='host',invite=null}={}) {
   const exports={};
   const require=name=>{
     if(name==='react')return react;
+    if(name==='../auth/AuthProvider')return {useAuth:()=>({user})};
+    if(name==='./recoveryStore.js')return {readDraft:async()=>draft,deleteDraft:async()=>{},saveDraft:async()=>{if(storageFailure)throw Error('Storage full');}};
     if(name==='react/jsx-runtime')return{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'Fragment'};
     if(name==='./core')return core;
     if(name==='./photoPosition.js')return{reconcileOffsets};
@@ -39,7 +41,7 @@ function harness({cost=100,role='host',invite=null}={}) {
     if(name==='./editingConfirmation.mjs')return{createEditingConfirmation};
     return new Proxy({}, {get:(_,key)=>String(key)});
   };
-  runInNewContext(compiled,{exports,require,crypto,console,window:{setTimeout,clearTimeout,addEventListener(){},removeEventListener(){},scrollTo(){}},document:{getElementById:()=>null}});
+  runInNewContext(compiled,{exports,require,crypto,console,Error,window:{setTimeout,clearTimeout,addEventListener(){},removeEventListener(){},scrollTo(){}},document:{getElementById:()=>null}});
   const leaveGuard={current:()=>{}};
   function render(){let count=0;do{dirty=false;cursor=0;effects=[];tree=exports.Booth({active:true,invite,leaveGuard});for(const effect of effects)effect();if(++count>20)throw new Error('Unstable render');}while(dirty);return tree;}
   function find(type,predicate=()=>true){render();let result;function walk(node){if(!node||result)return;if(Array.isArray(node)){node.forEach(walk);return;}if(node.type===type&&predicate(node.props)){result=node.props;return;}walk(node.props?.children);}walk(tree);return result;}
@@ -67,6 +69,26 @@ test('insufficient points show a popup and never open capture or debit',async()=
   assert.equal(warning.children[0].props.children,'You need 100 points to continue.');
   assert.equal(ui.find('SessionScreen'),undefined);
   assert.equal(ui.debits(),0);
+});
+
+test('paid recovery verifies the stored session and opens editing without a new charge',async()=>{
+ const draft={sessionId:'paid-session',card:{layout:'A',shots:['one','two','three'],filter:'original',color:'cherry',caption:'Saved',design:'classic'},source:'camera',mode:'solo',guest:false};
+ const ui=harness({user:{id:'alice'},draft});let verified;
+ ui.charge.resume=async id=>{verified=id;ui.charge.receipt='Resumed';};
+ ui.render();await ui.flush();
+ const resume=ui.find('button',p=>p.children==='Resume saved editing');assert.ok(resume);await resume.onClick();await ui.flush();
+ assert.equal(verified,'paid-session');assert.equal(ui.debits(),0);
+ assert.equal(ui.find('EditScreen').card.caption,'Saved');assert.equal(ui.find('EditScreen').photosLocked,true);
+});
+
+test('opted-in recovery failure blocks deduction while preserving photos',async()=>{
+ const ui=harness({user:{id:'alice'},storageFailure:true});await ui.start();
+ ui.find('input',p=>p.type==='checkbox').onChange({target:{checked:true}});
+ ui.find('UploadScreen').onPhotos(['one','two','three']);ui.find('UploadScreen').onNext();await ui.flush();
+ ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').onConfirm();await ui.flush();
+ assert.equal(ui.debits(),0);assert.equal(ui.find('EditScreen'),undefined);
+ assert.match(ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').error,/Recovery could not be saved/);
+ assert.equal(ui.find('UploadScreen').card.shots.length,3);
 });
 
 test('authenticated invite opens the waiting room without choosing a mode or charging the guest',async()=>{

@@ -16,6 +16,11 @@ export function useSessionCharge() {
     setBusy(false); setError(''); setReceipt('');
     costRef.current = null; setCost(null);
   }
+  async function resume(sessionId:string){
+    const {data,error}=await supabase!.rpc('together_resume_session',{request_id:sessionId});
+    if(error||!data?.completed)throw new Error('We could not verify this paid session. Your saved photos have been kept. Please try again.');
+    id.current=data.session_id;settled.current=true;setReceipt('Resumed session. Editing and downloads are already covered.');setCost(data.used_trial?0:100);
+  }
   useEffect(() => () => { generation.current++; void supabase?.rpc('together_session_action', { request_id: id.current, operation: 'release' }).then(() => {}, () => {}); }, []);
   function reserve(roomCode: string | null = null): Promise<void> {
     if (settled.current) return Promise.resolve();
@@ -64,5 +69,5 @@ export function useSessionCharge() {
     pending.current = task;
     return task;
   }
-  return { complete, reserve, reset, busy, error, receipt, cost };
+  return { complete, reserve, reset, resume, sessionId:id.current, busy, error, receipt, cost };
 }
