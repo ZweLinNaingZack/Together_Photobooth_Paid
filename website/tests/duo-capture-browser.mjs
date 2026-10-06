@@ -12,6 +12,7 @@ try{
   const React=(await import('/node_modules/.vite/deps/react.js')).default;
   const {createRoot}=(await import('/node_modules/.vite/deps/react-dom_client.js')).default;
   const {SessionScreen}=await import('/src/booth/SessionScreen.tsx');
+  await import('/src/booth/journey.css');
   const NativePeer=window.RTCPeerConnection;window.qaPeers=[];window.RTCPeerConnection=class extends NativePeer{constructor(...args){super(...args);window.qaPeers.push(this);}};
   document.body.innerHTML='<div id="qa-duo"></div>';window.qaShots={host:[],guest:[]};window.qaConnected={};
   let n=0;Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{
@@ -27,6 +28,11 @@ try{
   createRoot(document.getElementById('qa-duo')).render(React.createElement(React.Fragment,null,React.createElement(Member,{role:'host'}),React.createElement(Member,{role:'guest'})));
  });
  await page.waitForFunction(()=>window.qaConnected.host&&window.qaConnected.guest,{},{timeout:20000});
+ for(const width of [1280,390]){
+  await page.setViewportSize({width,height:900});
+  const view=await page.locator('[data-role="host"] .session-view').boundingBox(),button=await page.locator('[data-role="host"] #capture-session').boundingBox();
+  assert.ok(button.y-(view.y+view.height)<28&&button.y>=view.y+view.height,'shutter is directly below preview at '+width);
+ }
  try{await page.locator('[data-role="host"] #capture-session').click({timeout:10000});}
  catch(e){console.log(await page.evaluate(()=>({videos:[...document.querySelectorAll('video')].map(v=>({state:v.readyState,paused:v.paused,width:v.videoWidth,tracks:v.srcObject?.getTracks().map(t=>({ready:t.readyState,enabled:t.enabled,settings:t.getSettings()}))})),text:document.body.innerText})));throw e;}
  await page.waitForFunction(()=>window.qaShots.host.length===1&&window.qaShots.guest.length===1,{},{timeout:25000});

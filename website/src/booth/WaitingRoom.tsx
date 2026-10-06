@@ -1,6 +1,7 @@
 import { WarningNotice } from '../components/WarningNotice';
 import { useEffect,useRef,useState } from 'react';
 import {prepareCamera,expirePreparedCamera} from './cameraQuality.js';
+import {unlockCameraSound} from './cameraSounds.js';
 import { Heading } from './shared';
 import { layouts } from './core';
 import { cardDesigns } from './designs';
@@ -12,6 +13,7 @@ export function WaitingRoom({ room, busy, error, onReady, onContinue, onLeave }:
   const alive=useRef(true);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;expirePreparedCamera();};},[]);
   async function ready(){
+    unlockCameraSound();
     if(room[room.role].ready){onReady(false);return;}
     setCameraBusy(true);setCameraError('');
     try{if(room.settings.source==='camera'){const stream=await prepareCamera();if(!alive.current)return;if(localPreview.current){localPreview.current.srcObject=stream;await localPreview.current.play();}}if(alive.current)onReady(true);}

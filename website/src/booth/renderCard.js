@@ -4,12 +4,13 @@ import { cardDesigns,colors } from './designs.ts';
 import { loadFrame } from './frameAssets.ts';
 import { drawMusicTitle, musicTitles } from './musicTitle.js';
 import { coverCrop } from './photoPosition.js';
+import {drawFilmDate} from './filmDate.js';
   const loadImage=src=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=src});
   function cover(ctx,img,x,y,w,h,offset){const crop=coverCrop(img.videoWidth||img.naturalWidth,img.videoHeight||img.naturalHeight,w,h,offset);ctx.drawImage(img,crop.x,crop.y,crop.w,crop.h,x,y,w,h)}
   export function cardDimensions(state) {
     const l = layouts[state.layout], d = state.template && cardDesigns[state.template];
     if (!d) return { width: l.width, height: l.height };
-    const width = state.preview ? 600 : Math.max(l.width, Math.round(d.crop[2]));
+    const width = state.preview ? (state.previewWidth||600) : Math.max(l.width, Math.round(d.crop[2]));
     return { width, height: Math.round(d.crop[3] / d.crop[2] * width) };
   }
   async function renderDesignedCard(state){
@@ -24,9 +25,10 @@ import { coverCrop } from './photoPosition.js';
       const x=ox+(r.x-cx)*scale,y=oy+(r.y-cy)*scale;ctx.save();if(r.rotation){const [angle,rx,ry]=r.rotation;const tx=(rx-cx)*scale,ty=(ry-cy)*scale;ctx.translate(tx,ty);ctx.rotate(angle*Math.PI/180);ctx.translate(-tx,-ty)}ctx.beginPath();if(r.poly){r.poly.forEach(([px,py],n)=>{const dx=ox+(px-cx)*scale,dy=oy+(py-cy)*scale;n?ctx.lineTo(dx,dy):ctx.moveTo(dx,dy)});ctx.closePath()}else ctx.roundRect(x,y,w,h,(r.r||0)*scale);ctx.clip();ctx.drawImage(photo,x,y,w,h);ctx.restore();img.src="";photo.width=photo.height=1;
     }
     if(musicTitles[snapshot.template]) { await document.fonts.ready; drawMusicTitle(ctx,art,d,snapshot.template,snapshot.trackTitle,scale,snapshot.trackSubtitle); }
+    drawFilmDate(ctx,d,snapshot.template,scale);
     return canvas;
   }
-  async function renderCard(state){if(state.template)return renderDesignedCard(state);const snapshot={...state,shots:[...state.shots]},base=layouts[snapshot.layout],l=state.preview?{...base,width:600,height:Math.round(base.height/base.width*600)}:base,canvas=document.createElement('canvas');canvas.width=l.width;canvas.height=l.height;const ctx=canvas.getContext('2d'),[bg,fg]=colors[snapshot.color];await document.fonts.ready;ctx.fillStyle=bg;ctx.fillRect(0,0,l.width,l.height);
+  async function renderCard(state){if(state.template)return renderDesignedCard(state);const snapshot={...state,shots:[...state.shots]},base=layouts[snapshot.layout],l=state.preview?{...base,width:state.previewWidth||600,height:Math.round(base.height/base.width*(state.previewWidth||600))}:base,canvas=document.createElement('canvas');canvas.width=l.width;canvas.height=l.height;const ctx=canvas.getContext('2d'),[bg,fg]=colors[snapshot.color];await document.fonts.ready;ctx.fillStyle=bg;ctx.fillRect(0,0,l.width,l.height);
     for(const [i,shot] of snapshot.shots.entries()){if(!shot){if(snapshot.preview)continue;throw Error("Missing photo");}const img=await loadImage(shot);const r=l.slots[i],x=Math.round(r.x*l.width),y=Math.round(r.y*l.height),w=Math.round(r.w*l.width),h=Math.round(r.h*l.height);const photo=document.createElement('canvas');photo.width=w;photo.height=h;const pc=photo.getContext('2d',{willReadFrequently:true});cover(pc,img,0,0,w,h,snapshot.offsets?.[i]);if(snapshot.filter!=='original'){const pixels=pc.getImageData(0,0,w,h);await applyFilter(pixels,snapshot.filter,17+i);pc.putImageData(pixels,0,0)}ctx.drawImage(photo,x,y);img.src="";photo.width=photo.height=1;if(snapshot.design==='outline'){ctx.strokeStyle=fg;ctx.lineWidth=2;ctx.strokeRect(x+5,y+5,w-10,h-10)}}
     const a=l.caption,cx=(a.x+a.w/2)*l.width,cy=(a.y+a.h/2)*l.height,available=a.w*l.width-18;ctx.fillStyle=fg;ctx.textAlign='center';let size=Math.min(66,a.h*l.height*.33);ctx.font=`italic ${size}px "DM Sans", sans-serif`;while(ctx.measureText(snapshot.caption).width>available&&size>12){ctx.font=`italic ${--size}px "DM Sans", sans-serif`}ctx.fillText(snapshot.caption,cx,cy+size*.12);if(a.h*l.height>130){ctx.font=`500 ${Math.min(20,a.w*l.width/23)}px "DM Sans", sans-serif`;ctx.fillText('T O G E T H E R',cx,cy+size*.9+16)}if(snapshot.design==='hearts'){ctx.font=`${Math.min(30,a.h*l.height*.18)}px "DM Sans", sans-serif`;ctx.fillText('♡',cx,cy-size*.7)}return canvas;
   }
