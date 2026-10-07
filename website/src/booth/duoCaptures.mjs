@@ -12,7 +12,13 @@ export function createDuoCaptures({guest,count,snapshot,combine,send,onPhoto,onP
   const e={id,index,local,remote:null,ready:false,peerReady:false,finishing:false,timer:null};
   latest.set(index,id);entries.set(id,e);seen.add(id);if(seen.size>512)seen.delete(seen.values().next().value);arm(e);notify();onCaptured();return e;
  }
- function transmit(e){return send({type:'capture-original',id:e.id,index:e.index,photo:e.local});}
+ function transmit(e){
+  // A retry click or repeated capture command must not enqueue the same large
+  // original repeatedly while it is already waiting for the data channel.
+  if(e.transmission)return e.transmission;
+  e.transmission=Promise.resolve().then(()=>send({type:'capture-original',id:e.id,index:e.index,photo:e.local})).finally(()=>{e.transmission=null;});
+  return e.transmission;
+ }
  function completed(e){return send({type:'capture-complete',id:e.id,index:e.index});}
  async function finish(e){
   if(!current(e)||!e.remote||e.finishing||e.ready)return;

@@ -31,9 +31,23 @@ export function videoSample(stats,previous=new Map()){
   }
   if(r.type==='remote-inbound-rtp'&&r.kind==='video'){
    if(Number.isFinite(r.fractionLost))loss=Math.max(0,r.fractionLost);
+   else {
+    // Some browsers omit fractionLost. Use matched RTCP report intervals,
+    // rather than interpreting missing measurements as permanent poor quality.
+    const old=previous.get(r.id),local=stats.get(r.localId),oldLocal=previous.get(r.localId);
+    if(old&&local&&oldLocal&&r.timestamp>old.timestamp){
+     const sent=local.packetsSent-oldLocal.packetsSent,lost=r.packetsLost-old.packetsLost;
+     if(sent>0&&Number.isFinite(lost))loss=Math.min(1,Math.max(0,lost)/sent);
+    }
+   }
    if(Number.isFinite(r.roundTripTime))rtt=r.roundTripTime;
   }
   if(r.type==='candidate-pair'&&r.state==='succeeded'&&r.nominated){bandwidth=r.availableOutgoingBitrate;rtt=r.currentRoundTripTime??rtt;}
+ }
+ // Prefer the actual selected route over an older nominated candidate pair.
+ for(const r of stats.values())if(r.type==='transport'&&r.selectedCandidatePairId){
+  const pair=stats.get(r.selectedCandidatePairId);
+  if(pair){bandwidth=pair.availableOutgoingBitrate;rtt=pair.currentRoundTripTime??rtt;}
  }
  return {next,sent,received,loss,rtt,bandwidth,cpu};
 }

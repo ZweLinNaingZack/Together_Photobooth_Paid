@@ -56,10 +56,11 @@ export function createCameraTransport({ client, topic, role, request, onMessage,
         void broadcast({ from: role, ack: payload.message.id }).catch(() => {});
         deliver(payload.message);
       });
-      channel.subscribe(status => {
+      channel.subscribe((status, error) => {
         if (stopped) return;
         subscribed = status === 'SUBSCRIBED';
-        onStatus(subscribed ? 'Private WebSocket' : 'HTTP fallback (WebSocket unavailable)');
+        const denied=/unauthorized|permissions|forbidden/i.test(error?.message||'');
+        onStatus(subscribed ? 'Private WebSocket' : denied ? 'HTTP fallback (private channel access denied; check migration 008 and room authorization)' : 'HTTP fallback (WebSocket unavailable)');
       });
     })().catch(() => { if (!stopped) onStatus('HTTP fallback (WebSocket authorization failed)'); });
   } else onStatus('HTTP fallback');

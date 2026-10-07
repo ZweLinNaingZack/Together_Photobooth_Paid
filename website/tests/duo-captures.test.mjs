@@ -21,7 +21,14 @@ test('shutter finishes and next photo captures while both original transfers are
  }finally{p.close();}
 });
 test('retry reuses originals rather than photographing a new pose',async()=>{
- const p=pair();try{await p.peers[0].capture(0);p.originals.length=0;await p.peers[0].retry();await p.deliver();assert.deepEqual(p.sampled,[1,1]);assert.deepEqual(p.pending,[0,0]);assert.deepEqual(p.photos[0],p.photos[1]);}finally{p.close();}
+ const p=pair();try{await p.peers[0].capture(0);await flush();p.originals.length=0;await p.peers[0].retry();await p.deliver();assert.deepEqual(p.sampled,[1,1]);assert.deepEqual(p.pending,[0,0]);assert.deepEqual(p.photos[0],p.photos[1]);}finally{p.close();}
+});
+test('repeated retries share an original already in flight',async()=>{
+ let release,originals=0;const blocked=new Promise(resolve=>release=resolve);
+ const p=createDuoCaptures({guest:false,count:1,snapshot:()=>photo('test'),combine:async()=>'',
+  send:event=>{if(event.type==='capture-original'){originals++;return blocked;}return Promise.resolve();},
+  onPhoto:()=>{},onPending:()=>{},onError:()=>{}});
+ try{await p.capture(0);const retries=[p.retry(),p.retry()];await flush();assert.equal(originals,1);release();await Promise.all(retries);}finally{release();p.dispose();}
 });
 test('a late original cannot overwrite a newer retake and disposal ignores late transfers',async()=>{
  const p=pair();try{await p.peers[0].capture(0);const old=p.originals.splice(0);await p.peers[0].capture(0);await p.deliver();const final=p.photos[0][0];for(const m of old)p.peers[m.target].receive(m.event);await flush();assert.equal(p.photos[0][0],final);p.close();for(const m of old)p.peers[m.target].receive(m.event);assert.equal(p.photos[0][0],final);}finally{p.close();}

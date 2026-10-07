@@ -7,6 +7,7 @@ import { supabase } from '../auth/client';
 import {recordDiagnostic} from './diagnostics.js';
 import {validatePeerPhotos} from './peerPhoto.js';
 import {createPreviewQuality,recoveryDelay,videoSample} from './liveQuality.js';
+import {transferProgress} from './transferProgress.js';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
 type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
@@ -46,7 +47,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     let guestGeneration = 0, offerGeneration = 0, negotiationGeneration = 0;
     let candidates: { session: string; candidate: RTCIceCandidateInit }[] = [];
     const localId = crypto.randomUUID(), auth = { code: room.code, token: room.token };
-    const incoming = new Map<string, { size: number; data: string }>();
+    const incoming = new Map<string, { size: number; data: string; updated: number }>();
     const acknowledgments = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
     let outgoing = Promise.resolve();
     let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -96,12 +97,15 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         if (stopped || (channel !== next && control !== next) || typeof event.data !== 'string' || event.data.length > 16000) return;
         try {
           const message = JSON.parse(event.data);
+          for(const [id,item] of incoming)if(Date.now()-item.updated>30000)incoming.delete(id);
+          if(message.type==='cancel'){incoming.delete(message.id);return;}
           if (message.type === 'ack') { acknowledgments.get(message.id)?.resolve(); acknowledgments.delete(message.id); return; }
-          if (message.type === 'begin' && typeof message.id === 'string' && Number.isInteger(message.size) && message.size > 0 && message.size <= 6000000 && incoming.size < 4) incoming.set(message.id, { size: message.size, data: '' });
+          if (message.type === 'begin' && typeof message.id === 'string' && Number.isInteger(message.size) && message.size > 0 && message.size <= 6000000 && incoming.size < 4) incoming.set(message.id, { size: message.size, data: '', updated: Date.now() });
           if (message.type === 'part') {
             const item = incoming.get(message.id);
             if (!item || typeof message.data !== 'string') return;
             item.data += message.data;
+            item.updated=Date.now();
             if (item.data.length > item.size) { incoming.delete(message.id); return; }
             if (item.data.length === item.size) {
               incoming.delete(message.id);
@@ -119,11 +123,14 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         const active = small?control:channel, id = crypto.randomUUID();
         if (stopped || active?.readyState !== 'open') throw new Error('Wait for both cameras to connect.');
         if (data.length > 6000000) throw new Error('This photo is too large to share. Please try again.');
-        const deadline = Date.now() + 20000;
+        const progress=transferProgress();
+        try {
         active.send(JSON.stringify({ type: 'begin', id, size: data.length }));
         for (let offset = 0; offset < data.length; offset += 12000) {
-          while (active.bufferedAmount > 64000) {
-            if (stopped || active.readyState !== 'open' || Date.now() > deadline) throw new Error('Photo sharing paused. Reconnect and retake this photo.');
+          progress.check(active.bufferedAmount);
+          while (active.bufferedAmount > 32000) {
+            if (stopped || active.readyState !== 'open') throw new Error('Camera connection closed.');
+            progress.check(active.bufferedAmount);
             await new Promise(resolve => setTimeout(resolve, 40));
           }
           if (stopped || active.readyState !== 'open') throw new Error('Camera connection closed.');
@@ -136,9 +143,15 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
               catch (e) { clearTimeout(timeout); acknowledgments.delete(id); reject(e); }
             });
           } else active.send(JSON.stringify({ type: 'part', id, data: data.slice(offset, offset + 12000) }));
+          progress.sent(active.bufferedAmount);
+        }
+        } catch(error) {
+          if(active.readyState==='open')try{active.send(JSON.stringify({type:'cancel',id}));}catch{/* Peer may close during cleanup. */}
+          throw error;
         }
       });
-      if(!small)outgoing = task.catch(report);
+      // The capture manager owns photo retry UI. A slow photo is not a failed camera.
+      if(!small)outgoing = task.catch(()=>{});
       return task;
     };
     function createPeer(id: string) {

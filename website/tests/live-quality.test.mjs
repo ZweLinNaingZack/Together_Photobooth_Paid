@@ -1,6 +1,17 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createPreviewQuality,videoSample,recoveryDelay} from '../src/booth/liveQuality.js';
+test('missing fractionLost uses packet deltas and the selected transport route',()=>{
+ const old=new Map([['o',{packetsSent:100}],['r',{timestamp:1000,packetsLost:2}]]);
+ const stats=new Map([
+ ['o',{id:'o',type:'outbound-rtp',kind:'video',packetsSent:200}],
+ ['r',{id:'r',type:'remote-inbound-rtp',kind:'video',localId:'o',timestamp:3000,packetsLost:3}],
+ ['active',{id:'active',type:'candidate-pair',state:'succeeded',nominated:true,currentRoundTripTime:.1,availableOutgoingBitrate:5000000}],
+ ['old',{id:'old',type:'candidate-pair',state:'succeeded',nominated:true,currentRoundTripTime:2,availableOutgoingBitrate:1000}],
+ ['t',{id:'t',type:'transport',selectedCandidatePairId:'active'}],
+ ]);
+ const sample=videoSample(stats,old);assert.equal(sample.loss,.01);assert.equal(sample.rtt,.1);assert.equal(sample.bandwidth,5000000);
+});
 test('preview backs off under sustained pressure and improves only with sustained measured headroom',()=>{
  const q=createPreviewQuality();assert.equal(q.profile.name,'Balanced');
  assert.equal(q.sample({cpu:true},10000),false);assert.equal(q.sample({cpu:true},12000),true);assert.equal(q.profile.name,'Low bandwidth');
