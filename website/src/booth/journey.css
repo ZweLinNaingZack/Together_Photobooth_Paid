@@ -32,6 +32,20 @@
 .frame-thumbnail img.loaded{opacity:1}
 .finish-controls input{max-width:100%;width:100%;box-sizing:border-box}
 .expand-preview-button{display:block;margin:12px auto;min-height:44px}
+.waiting-camera{padding-bottom:24px;margin-bottom:24px;border-bottom:1px solid var(--line)}
+.waiting-camera-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.waiting-camera video{display:block;width:100%;max-width:360px;aspect-ratio:4/3;object-fit:cover;border-radius:12px;background:var(--ink);margin:auto}
+.waiting-camera video.mirrored{transform:scaleX(-1)}
+.waiting-camera .session-note{margin:16px 0 0}
+.recovery-panel,.export-help{padding:20px 24px;border:1px solid var(--line);border-radius:12px;background:var(--paper);display:flex;flex-wrap:wrap;align-items:center;gap:16px;max-width:920px;margin:24px auto;box-sizing:border-box}
+.recovery-panel p,.export-help p{flex-basis:100%;margin:0;line-height:1.7}
+.recovery-panel p:empty{display:none}
+.recovery-panel .recovery-toggle{display:flex;align-items:flex-start;gap:12px;width:100%;margin:0;color:var(--ink);font-weight:500;line-height:1.6;cursor:pointer}
+.recovery-panel .recovery-toggle input{flex:0 0 20px;width:20px;height:20px;margin:2px 0 0;padding:0;accent-color:var(--red)}
+.recovery-toggle span{flex:1;min-width:0}
+.export-help a{display:inline-flex;align-items:center;text-decoration:none;min-height:44px}
+.export-support{display:block;margin:20px auto 32px;min-height:44px}
+@media(max-width:600px){.recovery-panel,.export-help{padding:18px;gap:14px}.recovery-panel>button,.export-help>button,.export-help>a{width:100%;justify-content:center;text-align:center}.waiting-camera-toolbar{gap:10px}}
 .expanded-photo-editor{width:min(1100px,96vw);max-width:96vw;height:94dvh;max-height:94dvh;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--paper);color:var(--ink);overflow:hidden}
 .expanded-photo-editor[open]{display:flex;flex-direction:column;gap:14px}
 .expanded-photo-editor::backdrop{background:#151915b8}
