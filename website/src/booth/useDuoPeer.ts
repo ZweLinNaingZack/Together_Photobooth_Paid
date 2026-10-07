@@ -6,6 +6,7 @@ import { connectionRetry } from './connectionRetry.mjs';
 import { supabase } from '../auth/client';
 import {recordDiagnostic} from './diagnostics.js';
 import {validatePeerPhotos} from './peerPhoto.js';
+import {createPreviewQuality,recoveryDelay,videoSample} from './liveQuality.js';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
 type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
@@ -51,15 +52,32 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
     const startedAt = Date.now();
     let connectedAfter: number | null = null;
+    let quality=createPreviewQuality(),previousStats=new Map(),statsBusy=false,parametersBusy=false;
+    let qualityStatus='Waiting for negotiation',healthySince=0;
+    async function applyQuality(active: RTCPeerConnection){
+      if(parametersBusy||stopped||pc!==active||active.signalingState!=='stable')return;
+      parametersBusy=true;
+      try{
+        for(const sender of active.getSenders())if(sender.track?.kind==='video'){
+          const params=sender.getParameters();if(!params.encodings?.length)continue;
+          const p=quality.profile;
+          params.encodings=params.encodings.map(e=>({...e,maxBitrate:p.bitrate,maxFramerate:p.fps,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/p.width)}));
+          await sender.setParameters(params);
+          if(pc===active)qualityStatus=p.name;
+        }
+      }catch{if(pc===active)qualityStatus='Browser-managed (preview controls unavailable)';}
+      finally{parametersBusy=false;}
+    }
     const recover = () => {
-      if (stopped || recoveryTimer || automaticRetries.current >= 2) return;
+      if (stopped || recoveryTimer) return;
+      if(automaticRetries.current>=4){setError('Automatic reconnection paused. Check Connection details, then select Reconnect cameras.');return;}
       recoveryTimer = setTimeout(() => {
         recoveryTimer = undefined;
         if (stopped || pc?.connectionState === 'connected' && channelsOpen()) return;
         automaticRetries.current++;
         recordDiagnostic('camera_retry');
         setAttempt(value => value + 1);
-      }, 3000);
+      }, recoveryDelay(automaticRetries.current));
     };
     setRemote(null); setConnected(false); setError('');
     const report = (e: unknown) => { if (!stopped) {const reference=recordDiagnostic('camera_failed',Date.now()-startedAt);setError(`${e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'} Support reference: ${reference}.`);} };
@@ -125,6 +143,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     };
     function createPeer(id: string) {
       closePeer(); session = id; negotiationGeneration = Date.now();
+      quality=createPreviewQuality();previousStats=new Map();healthySince=0;
       setPhase('Finding a route between your cameras');
       if (!config) throw new Error('Camera connection settings are still loading.');
       const next = new RTCPeerConnection({ iceServers: config.iceServers,
@@ -136,20 +155,15 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       // transceiver pairing are preserved on both the offer and answer sides.
       next.onsignalingstatechange=()=>{
         if(next.signalingState!=='stable'||!next.localDescription)return;
-        for(const sender of next.getSenders())if(sender.track?.kind==='video'){
-          const params=sender.getParameters();
-          if(!params.encodings?.length)continue;
-          params.encodings=params.encodings.map(encoding=>({...encoding,maxBitrate:3500000,maxFramerate:30,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/1280)}));
-          void sender.setParameters(params).catch(()=>{});
-        }
+        void applyQuality(next);
       };
       next.ontrack = event => { if (!stopped && pc === next) setRemote(event.streams[0] || new MediaStream([event.track])); };
       next.onicecandidate = event => { if (!stopped && pc === next && event.candidate) void signal({ type: 'candidate', session: id, candidate: event.candidate.toJSON() }).catch(report); };
       next.onconnectionstatechange = () => {
         if (stopped || pc !== next) return;
-        if (next.connectionState === 'failed' || next.connectionState === 'disconnected') { setConnected(false); setError(config?.relayConfigured ? 'The camera connection was interrupted. Try reconnecting your cameras.' : 'The cameras could not connect directly. This booth still needs a TURN relay for networks that block direct connections.'); }
+        if (next.connectionState === 'failed' || next.connectionState === 'disconnected') { healthySince=0;setConnected(false);setPhase('Connection interrupted. Allowing the network to recover…'); }
         if (next.connectionState === 'failed' || next.connectionState === 'disconnected') recover();
-        if (next.connectionState === 'connected' && channelsOpen()) { setConnected(true); setError(''); }
+        if (next.connectionState === 'connected' && channelsOpen()) { clearTimeout(recoveryTimer);recoveryTimer=undefined;setConnected(true); setError('');setPhase('Your cameras are connected'); }
       };
       next.oniceconnectionstatechange = () => {
         if (stopped || pc !== next) return;
@@ -211,8 +225,15 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     const statsTimer = setInterval(() => {
       const active = pc;
       if (!active || stopped) { if (!stopped) setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nSignaling: waiting for the other camera\nRelay configured: ${config ? config.relayConfigured ? 'yes' : 'no' : 'settings unavailable'}`); return; }
+      if(statsBusy)return;statsBusy=true;
       void active.getStats().then(stats => {
         if (stopped || pc !== active) return;
+        const sample=videoSample(stats,previousStats);previousStats=sample.next;
+        if(active.connectionState==='connected'&&channelsOpen()){
+          healthySince ||= Date.now();
+          if(Date.now()-healthySince>30000)automaticRetries.current=0;
+          if(quality.sample(sample,Date.now()))void applyQuality(active);
+        }else healthySince=0;
         let receivedFrames = 0, localCandidates = 0, remoteCandidates = 0;
         let route = 'Not selected', roundTrip = 'Not available';
         stats.forEach(report => {
@@ -226,8 +247,8 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
           }
         });
         // Intentionally exclude tokens, room codes, SDP, addresses and photos.
-        setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nSelected route: ${route}\nNetwork round trip: ${roundTrip}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
-      }).catch(() => {});
+        setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nSelected route: ${route}\nNetwork round trip: ${roundTrip}\nPreview mode: ${qualityStatus}\nSending: ${sample.sent}\nReceiving: ${sample.received}\nRemote packet loss: ${sample.loss===undefined ? 'Unavailable' : (sample.loss*100).toFixed(1)+'%'}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
+      }).catch(() => {}).finally(()=>{statsBusy=false;});
     }, 2000);
     const configPromise = preparation.current?.token === room.token ? preparation.current.promise : connectionRetry(() => roomRequest<RtcConfig>('rtc', auth), () => stopped);
     void configPromise.then(result => {

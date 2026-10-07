@@ -33,7 +33,7 @@ try{
  await page.waitForFunction(()=>window.qaConnected.host&&window.qaConnected.guest,{},{timeout:20000});
  await page.waitForFunction(()=>document.querySelector('[data-role="host"] video[aria-label="Your person’s live camera"]')?.videoWidth>640,{},{timeout:15000});
  const encodings=await page.evaluate(()=>window.qaPeers.filter(p=>p.connectionState==='connected').flatMap(p=>p.getSenders().flatMap(s=>s.getParameters().encodings||[])));
- assert.ok(encodings.length===2&&encodings.every(e=>e.maxBitrate===3500000&&e.scaleResolutionDownBy===1),'both senders allow clear previews without the old 640px cap; browsers may adapt for CPU/network');
+ assert.ok(encodings.length===2&&encodings.every(e=>e.maxBitrate>=600000&&e.maxBitrate<=2400000&&e.scaleResolutionDownBy>=1),'both senders use bounded adaptive preview settings');
  for(const width of [1280,390]){
   await page.setViewportSize({width,height:900});
   const view=await page.locator('[data-role="host"] .session-view').boundingBox(),button=await page.locator('[data-role="host"] #capture-session').boundingBox();
