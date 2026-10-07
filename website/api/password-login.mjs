@@ -17,6 +17,9 @@ export function makeLoginHandler({env=process.env,fetcher=fetch,clientFactory=cr
  const limited=seconds=>{res.setHeader('Retry-After',String(seconds));return res.status(429).json({message:'Too many sign-in attempts. Please wait.',retryAfter:seconds});};
  let acquired=false;
  try{
+  // Bounded housekeeping, separate from login locks; a cleanup failure must not
+  // block sign-in (also permits rolling deployment before migration 018).
+  try { await db.rpc('together_prune_login_limits'); } catch { /* Retry cleanup on a later request. */ }
   const wait=await limit('begin');if(wait)return limited(wait);acquired=true;
   const response=await fetcher(`${url}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:env.VITE_SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),password,gotrue_meta_security:{captcha_token:captchaToken}}),signal:AbortSignal.timeout(15000)});
   const result=await response.json();

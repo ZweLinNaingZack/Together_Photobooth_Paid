@@ -5,6 +5,7 @@ import { createCameraTransport } from './cameraTransport.mjs';
 import { connectionRetry } from './connectionRetry.mjs';
 import { supabase } from '../auth/client';
 import {recordDiagnostic} from './diagnostics.js';
+import {validatePeerPhotos} from './peerPhoto.js';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
 type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
@@ -87,7 +88,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
             if (item.data.length === item.size) {
               incoming.delete(message.id);
               const payload = JSON.parse(item.data);
-              if (payload && typeof payload.type === 'string') listener.current(payload);
+              if (payload && typeof payload.type === 'string') { validatePeerPhotos(payload); listener.current(payload); }
               next.send(JSON.stringify({ type: 'ack', id: message.id }));
             }
           }

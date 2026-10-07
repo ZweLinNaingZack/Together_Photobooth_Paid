@@ -56,6 +56,7 @@ export function supabaseRoomStore(client) {
     },
     async save(code,version,data) {
       const result = await client.rpc('together_save_room',{room_code:code,expected_version:version,room_data:data});
+      if(result.error?.message === 'Owner room limit reached') throw fail('You already have three open booths. Leave an old booth or wait a minute after closing it, then try again.',429);
       if(result.error) throw result.error; return result.data;
     }
   };

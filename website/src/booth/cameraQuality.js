@@ -1,3 +1,4 @@
+import {jpegDimensions} from './peerPhoto.js';
 export const cameraConstraints={video:{facingMode:'user',width:{ideal:1920},height:{ideal:1440},frameRate:{ideal:24,max:30}},audio:false};
 /** @type {MediaStream|null} */
 let warm=null;
@@ -16,8 +17,16 @@ export function snapshot(video,mirrored,ratio=null,maxEdge=1920){
  const data=canvas.toDataURL('image/jpeg',.95);canvas.width=canvas.height=1;return data;
 }
 export async function combinePortraits(left,right){
- const images=await Promise.all([left,right].map(src=>new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=src;})));
- const width=Math.min(1440,Math.max(...images.map(i=>i.naturalWidth))),height=Math.round(width*images[0].naturalHeight/images[0].naturalWidth);
- const canvas=document.createElement('canvas');canvas.width=width*2;canvas.height=height;const ctx=canvas.getContext('2d');images.forEach((image,i)=>ctx.drawImage(image,i*width,0,width,height));
- const data=canvas.toDataURL('image/jpeg',.95);images.forEach(i=>i.src='');canvas.width=canvas.height=1;return data;
+ // Validate both inputs before starting either decoder, including direct callers.
+ [left,right].forEach(jpegDimensions);
+ const images=[new Image(),new Image()];let canvas;
+ try{
+  await Promise.all(images.map((image,i)=>new Promise((resolve,reject)=>{image.onload=()=>resolve(image);image.onerror=reject;image.src=[left,right][i];})));
+  if(images.some(i=>!i.naturalWidth||!i.naturalHeight||i.naturalWidth>8192||i.naturalHeight>8192||i.naturalWidth*i.naturalHeight>16000000))throw Error('The shared photo is too large. Please retake it.');
+  const width=Math.min(1440,Math.max(...images.map(i=>i.naturalWidth))),height=Math.round(width*images[0].naturalHeight/images[0].naturalWidth);
+  const scale=Math.min(1,2880/height);
+  canvas=document.createElement('canvas');canvas.width=Math.max(2,Math.floor(width*scale)*2);canvas.height=Math.max(1,Math.floor(height*scale));
+  const ctx=canvas.getContext('2d');images.forEach((image,i)=>ctx.drawImage(image,i*canvas.width/2,0,canvas.width/2,canvas.height));
+  return canvas.toDataURL('image/jpeg',.95);
+ }finally{images.forEach(i=>{i.onload=null;i.onerror=null;i.src='';});if(canvas)canvas.width=canvas.height=1;}
 }

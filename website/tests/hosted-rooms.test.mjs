@@ -7,8 +7,10 @@ import { createHostedRoomService } from '../server/hosted-rooms.mjs';
 test('hosted rooms persist across instances, handle racing joins and protect member identity', async () => {
  const db = new PGlite();
  try {
-  await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
+  await db.exec('create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;');
   await db.exec(await readFile(new URL('../004-hosted-rooms.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../013-login-security.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../018-resource-limits.sql',import.meta.url),'utf8'));
   let conflictingWrites = 0, turnCalls = 0;
   const store = {
    async limit(bucket,maximum) { return (await db.query('select together_room_limit($1,$2) as value',[bucket,maximum])).rows[0].value; },

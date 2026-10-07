@@ -59,6 +59,21 @@ test('gateway clears failures on successful login and only returns session token
  await handler({method:'POST',headers:{},socket:{remoteAddress:'127.0.0.1'},body:{email:'test@gmail.com',password:'valid',captchaToken:'test'}},response);
  assert.deepEqual(calls,['begin','success']);assert.deepEqual(response.body,{access_token:'access',refresh_token:'refresh'});
 });
+
+test('login accepts Supabase thenable RPC builders and tolerates failed housekeeping',async()=>{
+ for(const cleanupFails of [false,true]){
+  const calls=[];
+  const handler=makeLoginHandler({env:{SUPABASE_URL:'https://example.test',SUPABASE_SERVICE_ROLE_KEY:'server',VITE_SUPABASE_PUBLISHABLE_KEY:'public'},
+   clientFactory:()=>({rpc(name){
+    calls.push(name);
+    return {then(resolve,reject){return (name==='together_prune_login_limits'&&cleanupFails?Promise.reject(Error('temporary')):Promise.resolve({data:0})).then(resolve,reject);}};
+   }}),
+   fetcher:async()=>({ok:true,json:async()=>({access_token:'access',refresh_token:'refresh'})})});
+  const res={setHeader(){},status(n){this.statusCode=n;return this;},json(v){this.body=v;return this;}};
+  await handler({method:'POST',headers:{},socket:{remoteAddress:'127.0.0.1'},body:{email:'alice@gmail.com',password:'valid',captchaToken:'test'}},res);
+  assert.equal(res.statusCode,200);assert.deepEqual(calls,['together_prune_login_limits','together_login_limit','together_login_limit']);
+ }
+});
 test('password policy requires all five classes',()=>{
  for(const value of ['Ab1!','abcdefgh1!','ABCDEFGH1!','Abcdefgh!','Abcdefgh1','Abcdefg1_'])assert.equal(strongPassword(value),false,value);
  for(const symbol of '!@#$%^&*(),.?":{}|<>')assert.equal(strongPassword(`Abcdefg1${symbol}`),true);
@@ -68,6 +83,8 @@ test('shared limiter locks fifth failure, resets on success and expires',async()
  await db.exec('create role anon;create role authenticated;create role service_role;create role supabase_auth_admin;');
  await db.exec(await readFile(new URL('../013-login-security.sql',import.meta.url),'utf8'));
  await db.exec(await readFile(new URL('../015-login-attempts.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../004-hosted-rooms.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../018-resource-limits.sql',import.meta.url),'utf8'));
  const call=async op=>(await db.query('select together_login_limit($1,$2) as seconds',[['email:alice','ip:one'],op])).rows[0].seconds;
  for(let i=1;i<=5;i++){assert.equal(await call('begin'),0);assert.equal(await call('failure'),i===5?300:0);assert.equal((await db.query('select together_login_attempts_remaining($1) as n',[['email:alice','ip:one']])).rows[0].n,5-i);}
  assert.equal((await db.query('select together_login_limit($1,$2) as n',[['email:alice','ip:new-wifi'],'begin'])).rows[0].n,300,'changing IP does not bypass email lock');
