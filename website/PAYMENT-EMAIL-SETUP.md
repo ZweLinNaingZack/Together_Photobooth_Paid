@@ -24,7 +24,7 @@ Implemented: receipt or transaction-reference submission → pending order → q
 
 ## Review links
 
-Approve/Reject links open the selected order in the admin dashboard; neither link changes data. Administrators must check the transfer, enter the actual bank reference, and explicitly approve or reject. Receipt URLs are created only after admin authentication and expire after five minutes. Reference-only orders do not require an image.
+Approve/Reject links open the selected order in the admin dashboard; neither link changes data. Administrators must check the transfer and explicitly approve or reject. The customer note is optional. Run `017-optional-review-reference.sql` in Supabase SQL Editor before deploying the updated dashboard: it removes the required bank reference while retaining authorization, atomic crediting, repeat-approval protection and email notifications. Without a supplied bank reference, matching duplicate transfers across separate orders is a manual review responsibility. Receipt URLs are created only after admin authentication and expire after five minutes. Reference-only orders do not require an image.
 
 ## Reliability and monitoring
 

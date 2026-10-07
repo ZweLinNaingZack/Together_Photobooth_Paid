@@ -208,5 +208,18 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     const rejection=(await db.query("select payload from together_email_jobs where order_id=$1 and event='rejected'",[referenceOnly.id])).rows[0];
     assert.equal(rejection.payload.reference,'TRANSFER-456');
     assert.equal(rejection.payload.balance,300,'rejection does not change balance');
+    await db.exec('reset role');
+    await db.exec(await readFile(new URL('../017-optional-review-reference.sql',import.meta.url),'utf8'));
+    await as(alice);
+    const receiptOnly=await start();await upload(receiptOnly);await submit(receiptOnly);
+    await assert.rejects(()=>review(receiptOnly,true,null),/Administrator required/);
+    const before=(await wallet()).points;
+    await as(admin);await review(receiptOnly,true,null,'Received — thank you');await review(receiptOnly,true,null);
+    const approved=(await db.query('select * from together_topups where id=$1',[receiptOnly.id])).rows[0];
+    assert.equal(approved.bank_reference,null);
+    assert.equal(approved.review_note,'Received — thank you');
+    await as(alice);assert.equal((await wallet()).points,before+receiptOnly.points,'reference-free approval credits once');
+    await db.exec('reset role');
+    assert.equal((await db.query("select count(*)::int as n from together_email_jobs where order_id=$1 and event='approved'",[receiptOnly.id])).rows[0].n,1);
   } finally { await db.close(); }
 });
