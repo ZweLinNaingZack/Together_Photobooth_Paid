@@ -17,7 +17,7 @@ try{
   // Hold bulk traffic back to prove the shutter does not wait for originals.
   const originalSend=RTCDataChannel.prototype.send;
   RTCDataChannel.prototype.send=function(data){if(this.label==='together'){setTimeout(()=>{if(this.readyState==='open')originalSend.call(this,data);},1800);}else originalSend.call(this,data);};
-  document.body.innerHTML='<div id="qa-duo"></div>';window.qaShots={host:[],guest:[]};window.qaConnected={};
+  document.body.innerHTML='<div id="qa-duo"></div>';window.qaShots={host:[],guest:[]};window.qaConnected={};window.qaEditing={};window.qaConfirmations=0;
   let n=0;Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{
    const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=900;const ctx=canvas.getContext('2d');const color=n++?'#2277bb':'#dd3344';
    setInterval(()=>{ctx.fillStyle=color;ctx.fillRect(0,0,1200,900);ctx.fillStyle='white';ctx.fillText(String(Date.now()),20,20);},50);
@@ -26,7 +26,7 @@ try{
   function Member({role}){
    const [card,setCard]=React.useState({layout:'A',shots:[],template:null,filter:'original',color:'cherry',caption:'Together',design:'classic'});
    const room={code:'LOCALQ',token:role,role,settings:{layout:'A',template:null,source:'camera'},host:{ready:true,online:true},guest:{ready:true,online:true},bothReady:true};
-   return React.createElement('section',{'data-role':role},React.createElement(SessionScreen,{card,room,retake:null,method:'manual',seconds:3,restoreCamera:false,interrupted:false,flash:false,flashColor:'white',mirror:false,onMethod(){},onSeconds(){},onRetake(){},onBack(){},onNext(){},onMove(){},onFlashChange(){},onFlashColor(){},onMirrorChange(){},beforeReview:async()=>true,onPartnerConnection:value=>{window.qaConnected[role]=value;},onShot:(index,shot)=>setCard(c=>{const shots=[...c.shots];shots[index]=shot;window.qaShots[role]=shots;return {...c,shots};})}));
+   return React.createElement('section',{'data-role':role},React.createElement(SessionScreen,{card,room,retake:null,method:'manual',seconds:3,restoreCamera:false,interrupted:false,flash:false,flashColor:'white',mirror:false,onMethod(){},onSeconds(){},onRetake(){},onBack(){},onNext(){window.qaEditing[role]=true;},onMove(){},onFlashChange(){},onFlashColor(){},onMirrorChange(){},beforeReview:async()=>{window.qaConfirmations++;return true;},onPartnerConnection:value=>{window.qaConnected[role]=value;},onShot:(index,shot)=>setCard(c=>{const shots=[...c.shots];shots[index]=shot;window.qaShots[role]=shots;return {...c,shots};})}));
   }
   createRoot(document.getElementById('qa-duo')).render(React.createElement(React.StrictMode,null,React.createElement(Member,{role:'host'}),React.createElement(Member,{role:'guest'})));
  });
@@ -56,5 +56,8 @@ try{
  assert.equal(await page.locator('[data-role="host"]').getByRole('button',{name:'Continue to editing'}).isDisabled(),true,'editing cannot charge or export a provisional preview');
  await page.waitForFunction(()=>window.qaShots.host.length===3&&window.qaShots.host[2]===window.qaShots.guest[2],{},{timeout:25000});
  assert.equal(await page.evaluate(()=>window.qaShots.host[0]===window.qaShots.guest[0]&&window.qaShots.host[1]===window.qaShots.guest[1]),true,'reconnect retains old photos and can take another');
- console.log(JSON.stringify(result));
+ await page.locator('[data-role="host"] ').getByRole('button',{name:'Continue to editing'}).click();
+ await page.waitForFunction(()=>window.qaEditing.host&&window.qaEditing.guest);
+ assert.equal(await page.evaluate(()=>window.qaConfirmations),1,'only the creator confirms entry to editing');
+ console.log(JSON.stringify({...result,bothEnteredEditing:true}));
 }finally{await browser.close();}

@@ -42,9 +42,15 @@ export function createDuoCaptures({guest,count,snapshot,combine,send,onPhoto,onP
   }catch(error){fail(e);throw error;}
  }
  function receive(event){
-  if(disposed||!['capture-local','capture-original','capture-complete','capture-missing'].includes(event.type))return;
+  if(disposed||!['capture-local','capture-original','capture-complete','capture-missing','capture-request'].includes(event.type))return;
   const {id,index}=event;if(typeof id!=='string'||id.length>80||!Number.isInteger(index)||index<0||index>=count)return;
   let e=entries.get(id);
+  if(event.type==='capture-request'){
+   if(!e||!current(e)||e.index!==index){void send({type:'capture-missing',id,index}).catch(()=>{});return;}
+   // Either participant can request the missing original, including after the
+   // sender has already finished its own composite and stopped showing retry UI.
+   void (event.original===false?Promise.resolve():transmit(e)).then(()=>e.ready?completed(e):undefined).catch(()=>fail(e));return;
+  }
   if(event.type==='capture-local'&&guest){
    if(!e&&(event.retry||seen.has(id))){void send({type:'capture-missing',id,index}).catch(()=>{});return;}
    try{e ||= create(id,index);void transmit(e).catch(()=>fail(e));const waiting=early.get(id);if(waiting){early.delete(id);receive(waiting);}}
@@ -64,7 +70,7 @@ export function createDuoCaptures({guest,count,snapshot,combine,send,onPhoto,onP
  }
  async function retry(){
   const work=[...entries.values()].filter(e=>current(e)&&(!e.ready||!e.peerReady));
-  await Promise.all(work.map(async e=>{arm(e);try{if(!guest)await send({type:'capture-local',id:e.id,index:e.index,retry:true});await transmit(e);if(e.ready)await completed(e);else await finish(e);}catch{fail(e);}}));
+  await Promise.all(work.map(async e=>{arm(e);try{await send({type:'capture-request',id:e.id,index:e.index,original:!e.remote});if(!e.peerReady)await transmit(e);if(e.ready)await completed(e);else await finish(e);}catch{fail(e);}}));
  }
  return {capture,receive,retry,pending:()=>[...entries.values()].some(e=>current(e)&&(!e.ready||!e.peerReady)),
   pendingIndex:()=>[...entries.values()].find(e=>current(e)&&(!e.ready||!e.peerReady))?.index??null,

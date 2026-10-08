@@ -17,6 +17,16 @@ export function createPreviewQuality(){
  }};
 }
 export function recoveryDelay(attempt){return Math.min(20000,8000*2**attempt);}
+export function selectedVideoRoute(stats){
+ let pair;
+ for(const r of stats.values())if(r.type==='transport'&&r.selectedCandidatePairId){pair=stats.get(r.selectedCandidatePairId);if(pair)break;}
+ if(!pair)for(const r of stats.values())if(r.type==='candidate-pair'&&r.state==='succeeded'&&(r.selected||r.nominated)){pair=r;break;}
+ const local=pair&&stats.get(pair.localCandidateId),remote=pair&&stats.get(pair.remoteCandidateId);
+ const kind=value=>['host','srflx','prflx','relay'].includes(value)?value:'?';
+ const protocol=value=>['udp','tcp','tls'].includes(value)?value:'unavailable';
+ return {route:pair?`${kind(local?.candidateType)} → ${kind(remote?.candidateType)} (${protocol(local?.protocol)}); local TURN transport: ${local?.candidateType==='relay'?protocol(local.relayProtocol):'not relayed'}`:'Unavailable from browser',
+ roundTrip:Number.isFinite(pair?.currentRoundTripTime)?`${Math.round(pair.currentRoundTripTime*1000)} ms`:'Not available'};
+}
 export function videoSample(stats,previous=new Map()){
  const next=new Map();let sent='Unavailable',received='Unavailable',loss,rtt,bandwidth,cpu=false;
  const delta=(r,key)=>{const p=previous.get(r.id);return p&&r.timestamp>p.timestamp&&r[key]>=p[key]?(r[key]-p[key])/((r.timestamp-p.timestamp)/1000):undefined;};

@@ -23,6 +23,18 @@ test('shutter finishes and next photo captures while both original transfers are
 test('retry reuses originals rather than photographing a new pose',async()=>{
  const p=pair();try{await p.peers[0].capture(0);await flush();p.originals.length=0;await p.peers[0].retry();await p.deliver();assert.deepEqual(p.sampled,[1,1]);assert.deepEqual(p.pending,[0,0]);assert.deepEqual(p.photos[0],p.photos[1]);}finally{p.close();}
 });
+test('guest retry requests a missing host original even after the host finished combining',async()=>{
+ const p=pair();try{
+  await p.peers[0].capture(0);await flush();
+  // Only the guest's original arrives. The host can compose, but the guest cannot.
+  const messages=p.originals.splice(0);
+  for(const m of messages)if(m.target===0)p.peers[0].receive(m.event);
+  await flush();assert.equal(p.photos[0].length,1);assert.equal(p.photos[1].length,0);
+  await p.peers[1].retry();await flush();await p.deliver();
+  assert.deepEqual(p.pending,[0,0]);assert.deepEqual(p.photos[0],p.photos[1]);
+  assert.deepEqual(p.sampled,[1,1],'retry never takes a new pose');
+ }finally{p.close();}
+});
 test('repeated retries share an original already in flight',async()=>{
  let release,originals=0;const blocked=new Promise(resolve=>release=resolve);
  const p=createDuoCaptures({guest:false,count:1,snapshot:()=>photo('test'),combine:async()=>'',

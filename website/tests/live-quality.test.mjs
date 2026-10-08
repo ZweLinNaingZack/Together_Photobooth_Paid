@@ -1,6 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createPreviewQuality,videoSample,recoveryDelay} from '../src/booth/liveQuality.js';
+import {createPreviewQuality,videoSample,recoveryDelay,selectedVideoRoute} from '../src/booth/liveQuality.js';
+test('route diagnostics support selected pairs without nominated and distinguish TURN transport',()=>{
+ const stats=new Map([
+ ['t',{type:'transport',selectedCandidatePairId:'p'}],
+ ['p',{type:'candidate-pair',localCandidateId:'l',remoteCandidateId:'r',currentRoundTripTime:.169}],
+ ['l',{candidateType:'relay',protocol:'udp',relayProtocol:'tls',address:'private-address',url:'private-url'}],
+ ['r',{candidateType:'prflx'}],
+ ]);
+ const result=selectedVideoRoute(stats);assert.match(result.route,/relay → prflx \(udp\); local TURN transport: tls/);
+ assert.equal(result.roundTrip,'169 ms');assert.ok(!JSON.stringify(result).includes('private-'));
+});
 test('bandwidth near the configured cap does not unnecessarily reduce resolution',()=>{
  const q=createPreviewQuality();
  for(let i=0;i<10;i++)q.sample({bandwidth:1400000,rtt:.16,loss:0},10000+i*2000);

@@ -6,7 +6,7 @@ import { connectionRetry } from './connectionRetry.mjs';
 import { supabase } from '../auth/client';
 import {recordDiagnostic} from './diagnostics.js';
 import {validatePeerPhotos} from './peerPhoto.js';
-import {createPreviewQuality,recoveryDelay,videoSample} from './liveQuality.js';
+import {createPreviewQuality,recoveryDelay,videoSample,selectedVideoRoute} from './liveQuality.js';
 import {transferProgress} from './transferProgress.js';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
@@ -249,16 +249,11 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
           if(quality.sample(sample,Date.now()))void applyQuality(active);
         }else healthySince=0;
         let receivedFrames = 0, localCandidates = 0, remoteCandidates = 0;
-        let route = 'Not selected', roundTrip = 'Not available';
+        const {route,roundTrip}=selectedVideoRoute(stats);
         stats.forEach(report => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') receivedFrames += report.framesDecoded || 0;
           if (report.type === 'local-candidate') localCandidates++;
           if (report.type === 'remote-candidate') remoteCandidates++;
-          if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
-            const local = stats.get(report.localCandidateId), other = stats.get(report.remoteCandidateId);
-            route = `${local?.candidateType || '?'} → ${other?.candidateType || '?'} (${local?.protocol || '?'})`;
-            if (typeof report.currentRoundTripTime === 'number') roundTrip = `${Math.round(report.currentRoundTripTime * 1000)} ms`;
-          }
         });
         // Intentionally exclude tokens, room codes, SDP, addresses and photos.
         setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nSelected route: ${route}\nNetwork round trip: ${roundTrip}\nPreview mode: ${qualityStatus}\nSending: ${sample.sent}\nReceiving: ${sample.received}\nRemote packet loss: ${sample.loss===undefined ? 'Unavailable' : (sample.loss*100).toFixed(1)+'%'}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
