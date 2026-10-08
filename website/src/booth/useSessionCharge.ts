@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { reserveSession } from './reserveSession.mjs';
 import { supabase } from '../auth/client';
 
 export function useSessionCharge() {
@@ -30,8 +31,9 @@ export function useSessionCharge() {
     const task = (async () => {
       try {
         if (!supabase) throw new Error('Please sign in first.');
-        const { data, error } = await supabase.rpc('together_session_action', { request_id: id.current, operation: 'reserve', room_code: roomCode });
-        if (error || !data) throw new Error(error?.code === 'P0001' || error?.code === '42501' ? error.message : 'Session authorization is unavailable. Please check the database setup and retry.');
+        const args = { request_id: id.current, operation: 'reserve', room_code: roomCode };
+        const { data, error } = await reserveSession(() => supabase!.rpc('together_session_action', args), () => version === generation.current);
+        if (error || !data) throw new Error(error?.code === 'P0001' || error?.code === '42501' ? error.message : 'We could not connect to confirm your session. Your photos are still here. Please try again.');
         if (version !== generation.current) {
           if (!data.completed) void supabase.rpc('together_session_action', { request_id: data.session_id, operation: 'release' }).then(() => {}, () => {});
           throw new Error('This session has ended.');

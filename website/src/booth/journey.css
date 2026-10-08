@@ -66,3 +66,39 @@
 @media(max-width:800px){.customization-grid .preview-workspace{top:0}.customization-grid .final-preview{height:clamp(160px,34dvh,340px)}.editing-designs .card-design-face{height:140px}.editing-designs .card-art-stage{--art-height:66px}.editing-designs .plain-design-thumb{height:66px}.frame-carousel .card-design-option{flex-basis:100px}.customization-grid{display:block}.customization-grid .finish-controls{padding-top:24px}.customization-grid .preview-workspace{box-shadow:0 8px 16px #2221}}
 @media(max-height:600px){.customization-grid .final-preview{height:28dvh;min-height:100px}.customization-grid #preview-status{display:none}.customization-grid .final-preview>img{height:100%}.editing-designs .card-art-stage{--art-height:40px}.editing-designs .plain-design-thumb{height:40px}.editing-designs .card-design-face{height:108px}}
 @media(max-width:600px){.flow-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 8px}.booth-dialog-copy{font-size:15px}}
+
+.review-image img{position:absolute;inset:0;width:100%;height:100%;min-height:0;object-fit:contain;object-position:center}
+.recovery-options{display:block;padding:12px 16px;margin:12px auto}
+.recovery-options summary,.camera-settings summary{cursor:pointer;min-height:44px;align-content:center;font-weight:500;color:var(--ink)}
+.recovery-options[open] .recovery-toggle{margin:12px 0}
+.recovery-status{font-size:12px}
+.camera-settings{border-block:1px solid var(--line);padding:8px 0;margin:16px 0}
+.camera-device{display:grid;gap:8px;color:var(--muted);font-size:14px;margin:12px 0}
+.camera-device select{width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;padding:12px 38px 12px 14px;background:var(--paper);color:var(--ink);font-size:16px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%236d7068' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+@media(max-width:800px){
+ .customization-grid .preview-workspace{position:static;box-shadow:none}
+ .customization-grid .final-preview{height:360px;max-height:55svh}
+ .session-surface>.camera-settings{order:5;margin:0}
+ .session-surface .session-view{width:100%}
+ .session-tools{gap:8px;flex-wrap:wrap}
+ .camera-settings .capture-settings{display:flex}
+ .flow-booth[data-current-step="session"] .flow-heading,.flow-booth[data-current-step="design"] .flow-heading{margin:18px auto}
+ .flow-booth[data-current-step="session"] .flow-heading h1,.flow-booth[data-current-step="design"] .flow-heading h1{font-size:30px!important;line-height:1.1;letter-spacing:-1px;margin:8px 0!important}
+ .flow-booth[data-current-step="session"] .flow-heading .eyebrow,.flow-booth[data-current-step="design"] .flow-heading .eyebrow{display:none}
+ .flow-steps{display:flex;gap:8px;margin:8px 0;padding:10px 0;justify-content:center}
+ .flow-steps li{display:none}
+ .flow-steps li.current{display:flex;flex-direction:row;font-size:14px;gap:8px}
+ .flow-booth #flow-screen>.session-note{font-size:12px;line-height:1.5}
+ .recovery-options{margin:8px auto;padding:0 12px}
+ .review-photos{gap:10px}
+ .reorder-controls button{min-height:44px}
+}
+
+.preview-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;font-size:14px;font-weight:500}
+.preview-filter{position:relative;max-width:70%}
+.preview-filter::after{content:'⌄';position:absolute;right:16px;top:50%;transform:translateY(-55%);pointer-events:none;color:var(--ink)}
+.preview-filter select{appearance:none;max-width:100%;min-height:44px;padding:10px 40px 10px 16px;border:1px solid var(--line);border-radius:24px;background:var(--paper);color:var(--ink);font:inherit;cursor:pointer}
+.customization-grid .final-preview{background:var(--paper);border:1px solid var(--line)}
+.customization-grid.export-preview-grid{display:block;margin-inline:auto;width:100%}
+.export-preview-grid .preview-workspace{position:static}
+.export-preview-grid .final-preview{height:clamp(320px,60svh,620px);max-height:none}
