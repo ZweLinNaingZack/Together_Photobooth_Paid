@@ -1,6 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createPreviewQuality,videoSample,recoveryDelay} from '../src/booth/liveQuality.js';
+test('bandwidth near the configured cap does not unnecessarily reduce resolution',()=>{
+ const q=createPreviewQuality();
+ for(let i=0;i<10;i++)q.sample({bandwidth:1400000,rtt:.16,loss:0},10000+i*2000);
+ assert.equal(q.profile.name,'Balanced');
+});
 test('missing fractionLost uses packet deltas and the selected transport route',()=>{
  const old=new Map([['o',{packetsSent:100}],['r',{timestamp:1000,packetsLost:2}]]);
  const stats=new Map([

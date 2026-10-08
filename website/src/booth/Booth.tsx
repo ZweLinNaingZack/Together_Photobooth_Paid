@@ -35,7 +35,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const party = useRoom();
   const charge = useSessionCharge();
   const {user}=useAuth();
-  const [saveRecovery,setSaveRecovery]=useState(false),[savedDraft,setSavedDraft]=useState<any>(null),[recoveryMessage,setRecoveryMessage]=useState('');
+  const [saveRecovery,setSaveRecovery]=useState(true),[savedDraft,setSavedDraft]=useState<any>(null),[recoveryMessage,setRecoveryMessage]=useState('');
   const [restored,setRestored]=useState(false);
   const recoveredGuest=useRef(false);
   const recoveryWrites=useRef(Promise.resolve());
@@ -70,12 +70,27 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     if(!user||!card.shots.length||!card.shots.every(Boolean))return Promise.resolve();
     const guest=party.room?.role==='guest'||restored&&recoveredGuest.current;
     if(guest&&!editingApproved)return Promise.resolve();
-    const draft={card,source,mode,sessionId:charge.sessionId,guest};
+    const draft={card,source,mode,sessionId:charge.sessionId,guest,step:step==='export'?'export':'design',editingApproved};
     const task=recoveryWrites.current.catch(()=>{}).then(()=>saveDraft(user.id,draft));recoveryWrites.current=task;
     return task.then(()=>setRecoveryMessage('Recovery copy saved on this device for 24 hours.')).catch(()=>{setRecoveryMessage('This browser could not save recovery. Keep this tab open until you download.');if(required)throw new Error('Recovery could not be saved. Free some device storage or turn off recovery before continuing. No new charge was made.');});
   }
-  useEffect(()=>{if(user)void readDraft(user.id).then(setSavedDraft).catch(()=>{});},[user?.id]);
-  useEffect(()=>{if(saveRecovery&&hasPhotos)void persistRecovery();},[card,saveRecovery,editingApproved]);
+  useEffect(()=>{
+    if(!user||!active||invite)return;
+    let cancelled=false;
+    void readDraft(user.id).then(async draft=>{
+      if(cancelled||!draft)return;
+      setSavedDraft(draft);
+      // Older opt-in drafts and pre-payment backups remain manually resumable.
+      if(!draft.editingApproved)return;
+      if(!draft.guest)await charge.resume(draft.sessionId);
+      if(cancelled)return;
+      recoveredGuest.current=!!draft.guest;setRestored(true);setCard(draft.card);
+      setSource(draft.source);setMode(draft.mode);setEditingApproved(true);
+      setStep(draft.step==='export'?'export':'design');setInstructions(false);setSavedDraft(null);
+    }).catch(()=>{if(!cancelled)setSharedError('Your saved editing could not be restored automatically. Please try Resume saved editing.');});
+    return()=>{cancelled=true;};
+  },[user?.id,active,invite]);
+  useEffect(()=>{if(saveRecovery&&hasPhotos)void persistRecovery();},[card,saveRecovery,editingApproved,step]);
   const editingGate = useRef<ReturnType<typeof createEditingConfirmation> | null>(null);
   if (!editingGate.current) editingGate.current = createEditingConfirmation(() => billing.current(), setConfirmation);
   useEffect(() => () => editingGate.current?.dispose(), []);
@@ -207,7 +222,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
         {active&&savedDraft&&<div className="session-note recovery-panel"><p>A previous photocard is saved on this device.</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:'Could not resume.');}}}>Resume saved editing</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError("Could not delete the saved copy. Please try again."));setSavedDraft(null);}}>Delete saved copy</button><WarningNotice>{sharedError}</WarningNotice></div>}
-        {active&&['session','upload','design','export'].includes(step)&&<div className="session-note recovery-panel"><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setRecoveryMessage('Saved copy removed.');}}}/><span>Save recovery on this device for 24 hours</span></label><p>Optional. Photos stay on this device. Explicitly leaving the booth deletes the saved copy. Expired copies are removed when you return.</p><p role="status">{recoveryMessage}</p></div>}
+        {active&&['session','upload','design','export'].includes(step)&&<div className="session-note recovery-panel"><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setRecoveryMessage('Saved copy removed.');}}}/><span>Automatically save editing on this device</span></label><p>Enabled by default so refreshing restores your editing. Photos stay on this device for up to 24 hours. Leaving the booth deletes the saved copy.</p><p role="status">{recoveryMessage}</p></div>}
         {active && !confirmation.open && charge.error && <WarningNotice title="Before you continue"><p>{charge.error}</p><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></WarningNotice>}
         {active && ['session','upload','design','export'].includes(step) && <div className="session-note" aria-live="polite">
           {party.room?.role === 'guest' ? 'Your creator covers this session. No points or free trial are used from your account.' : charge.busy ? 'Confirming your session…' : charge.receipt || 'Nothing is deducted until you confirm that you’re ready to edit. Your free trial is used first, otherwise 100 points.'}

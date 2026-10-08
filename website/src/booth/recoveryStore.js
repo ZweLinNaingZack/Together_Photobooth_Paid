@@ -1,4 +1,4 @@
-// Opt-in, device-local storage. No photo is uploaded to our servers.
+// Automatic device-local recovery, with a user opt-out. No server photo upload.
 import {layouts,filters} from './core.js';
 const TTL=24*60*60*1000;
 function database(){return new Promise((resolve,reject)=>{const request=indexedDB.open('together-recovery',1);request.onupgradeneeded=()=>request.result.createObjectStore('drafts');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}

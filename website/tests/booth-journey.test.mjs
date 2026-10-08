@@ -91,6 +91,26 @@ test('opted-in recovery failure blocks deduction while preserving photos',async(
  assert.equal(ui.find('UploadScreen').card.shots.length,3);
 });
 
+for(const stage of ['design','export'])test(`refresh automatically restores ${stage} after verifying payment`,async()=>{
+ const draft={editingApproved:true,step:stage,sessionId:'paid-session',card:{layout:'A',shots:['one','two','three'],filter:'vintage',color:'cherry',caption:'Saved',design:'classic',offsets:[{x:.2,y:.7}]},source:'camera',mode:'solo',guest:false};
+ const ui=harness({user:{id:'alice'},draft});let verified;
+ ui.charge.resume=async id=>{verified=id;};ui.render();await ui.flush();
+ assert.equal(verified,'paid-session');assert.equal(ui.debits(),0);
+ assert.equal(ui.find('EditScreen').stage,stage);assert.equal(ui.find('EditScreen').card,draft.card);
+ assert.equal(ui.find('button',p=>p.children==='Resume saved editing'),undefined);
+});
+test('failed automatic payment verification retains recovery and does not unlock editing',async()=>{
+ const ui=harness({user:{id:'alice'},draft:{editingApproved:true,sessionId:'unverified',guest:false}});
+ ui.charge.resume=async()=>{throw Error('Unavailable');};ui.render();await ui.flush();
+ assert.equal(ui.find('EditScreen'),undefined);assert.equal(ui.debits(),0);
+ assert.ok(ui.find('button',p=>p.children==='Resume saved editing'));
+});
+test('a Duo guest restores saved editing without billing the guest',async()=>{
+ const draft={editingApproved:true,step:'design',guest:true,source:'camera',mode:'duo',card:{layout:'A',shots:['one','two','three'],filter:'original',caption:'Together',design:'classic'}};
+ const ui=harness({user:{id:'guest'},draft});ui.charge.resume=async()=>{throw Error('Guest must not be billed');};
+ ui.render();await ui.flush();assert.ok(ui.find('EditScreen'));assert.equal(ui.debits(),0);
+});
+
 test('authenticated invite opens the waiting room without choosing a mode or charging the guest',async()=>{
  const ui=harness({role:'guest',invite:'invitation-token'});let received;
  const join=ui.party.join.bind(ui.party);ui.party.join=async(code,invite)=>{received=invite;return join(code);};

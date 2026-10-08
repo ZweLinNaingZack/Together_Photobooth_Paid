@@ -62,6 +62,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         for(const sender of active.getSenders())if(sender.track?.kind==='video'){
           const params=sender.getParameters();if(!params.encodings?.length)continue;
           const p=quality.profile;
+          params.degradationPreference='maintain-framerate';
           params.encodings=params.encodings.map(e=>({...e,maxBitrate:p.bitrate,maxFramerate:p.fps,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/p.width)}));
           await sender.setParameters(params);
           if(pc===active)qualityStatus=p.name;

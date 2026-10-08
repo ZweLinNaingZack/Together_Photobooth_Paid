@@ -6,8 +6,9 @@ export const previewProfiles=[
 export function createPreviewQuality(){
  let level=1,bad=0,good=0,lastChange=0;
  return {get profile(){return previewProfiles[level];},sample({bandwidth,rtt,loss,cpu},now){
-  const poor=cpu||loss>.05||rtt>.6||(Number.isFinite(bandwidth)&&bandwidth<previewProfiles[level].bitrate*1.15);
-  const healthy=!poor&&Number.isFinite(bandwidth)&&bandwidth>previewProfiles[Math.min(2,level+1)].bitrate*1.5&&Number.isFinite(rtt)&&rtt<.25&&Number.isFinite(loss)&&loss<.02;
+  // A bandwidth estimate near our own cap is not evidence of congestion.
+  const poor=cpu||loss>.05||rtt>.6||(Number.isFinite(bandwidth)&&bandwidth<previewProfiles[level].bitrate*.8);
+  const healthy=!poor&&Number.isFinite(bandwidth)&&bandwidth>previewProfiles[Math.min(2,level+1)].bitrate*1.2&&Number.isFinite(rtt)&&rtt<.3&&Number.isFinite(loss)&&loss<.02;
   bad=poor?bad+1:0;good=healthy?good+1:0;
   if(now-lastChange<10000)return false;
   const next=bad>=2?Math.max(0,level-1):good>=5?Math.min(2,level+1):level;
