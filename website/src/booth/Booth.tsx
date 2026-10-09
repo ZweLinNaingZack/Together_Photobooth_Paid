@@ -25,6 +25,8 @@ import type { SavedRoom } from './useRoom';
 import { RoomRequestError } from './rooms';
 import type { DuoEvent } from './useDuoPeer';
 import { useSessionCharge } from './useSessionCharge';
+import { ActiveBoothDialog } from './ActiveBoothDialog';
+import type { ActiveBoothInfo } from './ActiveBoothDialog';
 import type { ActiveReservation } from './useSessionCharge';
 import './journey.css';
 import { prefetchFrames } from './frameAssets';
@@ -41,13 +43,22 @@ import { readDraft,saveDraft,deleteDraft,readActiveSession,saveActiveSession,del
  */
 interface ActiveRecord { sessionId: string; mode: BoothMode; source: 'camera' | 'upload'; step: 'session' | 'upload' | 'room'; card: CardState; photosSaved: boolean; room?: SavedRoom; duoUploads?: string[]; savedAt?: number }
 /** An unfinished session the user can resume or close. `local` is set when this device also has it saved. */
-type SessionConflict = Pick<ActiveReservation, 'sessionId' | 'duo' | 'expiresAt' | 'createdAt'> & { local: ActiveRecord | null; roomEnded?: boolean; error?: string };
-/** One line that tells the user which saved session this is. */
-function describeRecord(record: ActiveRecord) {
+type SessionConflict = Pick<ActiveReservation, 'sessionId' | 'duo' | 'expiresAt' | 'createdAt'> & { local: ActiveRecord | null; roomEnded?: boolean; error?: string;
+  /** 'start': a new booth was refused because of this one, so closing it continues straight into the new booth. */
+  origin?: 'load' | 'start' };
+/** Turn an unfinished session into what the popup shows. */
+function boothInfo(conflict: SessionConflict): ActiveBoothInfo {
+  const record = conflict.local, guest = record?.room?.role === 'guest';
+  const heldUntil = conflict.expiresAt ? shortTime(conflict.expiresAt) : undefined;
+  if (!record) return { kind: conflict.duo ? 'duo-unknown' : 'solo-unknown', heldUntil, ended: !!conflict.roomEnded, guest: false, hasSavedPhotos: false };
   const count = layouts[record.card.layout].count;
-  if (record.room) return `Duo · ${record.room.role === 'host' ? 'Booth you created' : 'Booth you joined'} · code ${record.room.code} · Layout ${record.card.layout}`;
-  if (record.mode === 'duo') return `Duo · Upload photos · Layout ${record.card.layout} · ${(record.duoUploads || []).filter(Boolean).length} of ${count * 2} photos saved on this device`;
-  return `Solo · ${record.source === 'upload' ? 'Upload photos' : 'Take photos'} · Layout ${record.card.layout} · ${record.card.shots.filter(Boolean).length} of ${count} photos saved on this device`;
+  const kind: ActiveBoothInfo['kind'] = record.room ? (guest ? 'duo-guest' : 'duo-host') : record.mode === 'duo' ? 'duo-upload' : record.source === 'upload' ? 'solo-upload' : 'solo-camera';
+  const photos = record.mode === 'duo' && !record.room ? (record.duoUploads || []).slice(0, count) : Array.from(record.card.shots, shot => shot || '');
+  const saved = kind === 'duo-upload' ? (record.duoUploads || []).filter(Boolean).length : record.card.shots.filter(Boolean).length;
+  // Photos only count as "saved here" when auto-save was on; guests get theirs back from the host.
+  const total = record.photosSaved && kind !== 'duo-guest' ? (kind === 'duo-upload' ? count * 2 : count) : undefined;
+  return { kind, card: record.card, photos, saved, total, roomCode: record.room?.code, heldUntil,
+    lastSaved: record.savedAt ? shortTime(record.savedAt) : undefined, ended: !!conflict.roomEnded, guest, hasSavedPhotos: !!total && saved > 0 };
 }
 const roomGone = (error: unknown) => error instanceof RoomRequestError && (error.status === 403 || error.status === 404);
 const shortTime = (value?: string | number) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
@@ -67,9 +78,9 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   // Unfinished-session recovery (before editing is confirmed).
   const [conflict,setConflict]=useState<SessionConflict|null>(null);
   const [resuming,setResuming]=useState(false);
-  const [confirmNew,setConfirmNew]=useState({open:false,busy:false,error:''});
+  const [closing,setClosing]=useState(false);
+  const [checkingConflict,setCheckingConflict]=useState(false);   // looking up the old booth after a refusal
   const [recheck,setRecheck]=useState(0);   // bumped when the page comes back from the browser's back/forward cache
-  const conflictPanel=useRef<HTMLDivElement>(null);
   const duoControl = useRef<((event: DuoEvent) => Promise<void>) | null>(null);
   const [sharedError, setSharedError] = useState('');
   const [useInvite, setUseInvite] = useState(true);
@@ -148,8 +159,8 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       setRecoveryMessage('The duo booth you were in has ended. Ask your person for a new invitation.');
       return;
     }
-    setConflict({ sessionId: record.sessionId, duo: record.mode === 'duo', local: record, roomEnded: ended,
-      error: ended ? undefined : error instanceof Error ? error.message : 'We could not resume this session automatically.' });
+    setConflict(current => ({ origin: current?.origin || 'load', sessionId: record.sessionId, duo: record.mode === 'duo', local: record, roomEnded: ended,
+      error: ended ? undefined : error instanceof Error ? error.message : 'We could not reopen this booth automatically. Please try again.' }));
   }
   // On opening the booth, restore in this order (only one of these exists at a time):
   //   1. a paid editing draft            → Frame & filter / Export   (existing behaviour)
@@ -186,8 +197,8 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         catch(e){if(!cancelled)resumeFailed(record,e);}
         return;
       }
-      const server=await charge.findActive().catch(()=>null);
-      if(!cancelled&&server)setConflict({...server,local:null});
+      const found=await lookUpUnfinished();
+      if(!cancelled&&found)setConflict({...found,origin:'load'});
     })();
     return()=>{cancelled=true;};
   },[user?.id,active,invite,recheck]);
@@ -219,8 +230,6 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     activeSaved.current=false;
     recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteActiveSession(user.id)).catch(()=>{});
   },[editingApproved,user?.id]);
-  // Bring the resume panel into view and move keyboard focus to it.
-  useEffect(()=>{if(conflict){conflictPanel.current?.focus({preventScroll:true});window.scrollTo(0,0);}},[conflict?.sessionId]);
   async function resumeConflict(){
     if(!conflict||resuming||conflict.roomEnded)return;
     setResuming(true);
@@ -239,26 +248,54 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     }finally{setResuming(false);}
   }
   async function startNewSession(){
-    if(!conflict||confirmNew.busy)return;
-    setConfirmNew({open:true,busy:true,error:''});
+    if(!conflict||closing)return;
+    const continueNew=conflict.origin==='start';
+    setClosing(true);
     try{
       // Only unconfirmed holds can be released; nothing was charged. Guests have no hold to release.
       if(conflict.sessionId)await charge.release(conflict.sessionId);
       clearPhotos();                              // also removes any saved copy on this device
       party.end();                                // leave a reconnected room, if any
-      setConflict(null);setConfirmNew({open:false,busy:false,error:''});
-      setStep('mode');setInstructions(false);
-      setRecoveryMessage('Your previous session was closed. No points were used for it. You can start a new session now.');
-    }catch(e){setConfirmNew({open:true,busy:false,error:e instanceof Error?e.message:'Could not close that session. Please try again.'});}
+      setConflict(null);setInstructions(false);
+      if(continueNew){
+        // The user was starting a new booth when the old one blocked it: carry straight on.
+        setRecoveryMessage('Your earlier booth was closed. Starting your new booth now.');
+        void startSession();
+      }else{
+        setStep('mode');
+        setRecoveryMessage('Your earlier booth was closed. Nothing was charged. You can start a new booth now.');
+      }
+    }catch(e){setConflict(current=>current&&{...current,error:e instanceof Error?e.message:'We could not close that booth. Check your connection and try again.'});}
+    finally{setClosing(false);}
   }
-  // A new reservation was refused because one already exists: offer that one instead of a dead-end message.
+  /**
+   * Find an unfinished booth this device does not know about (cleared storage, another device):
+   * the server reservation (migration 019) plus, for duo, this account's open room seat.
+   */
+  async function lookUpUnfinished():Promise<SessionConflict|null>{
+    const [server,seat]=await Promise.all([charge.findActive().catch(()=>null),party.findMine().catch(()=>null)]);
+    const blank={...card,shots:[],offsets:[],template:null};
+    const seatRecord=(sessionId:string,room:SavedRoom):ActiveRecord=>({sessionId,mode:'duo',source:'camera',step:'room',card:blank,photosSaved:false,room});
+    if(server&&!server.duo)return{...server,local:null};
+    // A duo hold with our host seat still open can be reopened; without the room it can only be released.
+    if(server?.duo)return seat?.role==='host'?{...server,local:seatRecord(server.sessionId,seat)}:{...server,local:null,roomEnded:true};
+    // Guests have no hold (only the host pays), but their seat may still be open.
+    if(seat?.role==='guest')return{sessionId:'',duo:true,local:seatRecord('',seat)};
+    return null;
+  }
+  // A new booth was refused because one already exists: offer that one instead of a dead-end message.
   async function offerExistingSession(error:unknown){
     if(!(error instanceof Error)||!/active booth/i.test(error.message))return;
-    const server=await charge.findActive().catch(()=>null);
-    if(!server)return;   // 019 not deployed or lookup failed: keep the original message visible
-    let local:ActiveRecord|null=null;
-    try{const saved=user?await readActiveSession(user.id):null;if(saved?.sessionId===server.sessionId)local=saved;}catch{/* ignore */}
-    charge.clearError();setConflict({...server,local});
+    setCheckingConflict(true);
+    try{
+      let local:ActiveRecord|null=null;
+      try{local=user?await readActiveSession(user.id):null;}catch{/* ignore */}
+      const found=await lookUpUnfinished();
+      if(!found)return;   // lookup unavailable: the fallback message explains what to do
+      // Prefer this device's own copy (it has the photos) when it is the same booth.
+      if(local&&(local.sessionId===found.sessionId||found.local?.room&&local.room?.token===found.local.room.token))found.local=local;
+      charge.clearError();setConflict({...found,origin:'start'});
+    }finally{setCheckingConflict(false);}
   }
   const editingGate = useRef<ReturnType<typeof createEditingConfirmation> | null>(null);
   if (!editingGate.current) editingGate.current = createEditingConfirmation(() => billing.current(), setConfirmation);
@@ -418,21 +455,12 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       <div className="flow-top"><a href="#" className="back-link">Leave the booth</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>How it works</button></div>
       <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
-        {active&&conflict&&<div ref={conflictPanel} tabIndex={-1} className="session-note recovery-panel resume-panel" role="region" aria-label="Unfinished session">
-          <p className="resume-title"><strong>You have an unfinished session</strong></p>
-          {conflict.local
-            ? <p>{describeRecord(conflict.local)}{conflict.local.savedAt?` · last saved ${shortTime(conflict.local.savedAt)}`:''}</p>
-            : <p>{conflict.duo?'Duo booth':'Solo booth'}{conflict.createdAt?` started at ${shortTime(conflict.createdAt)}`:''}{conflict.expiresAt?` · held until ${shortTime(conflict.expiresAt)}`:''}. Its photos are not saved on this device.</p>}
-          {conflict.local&&conflict.local.card.shots.some(Boolean)&&<div className="resume-thumbs" aria-hidden="true">{conflict.local.card.shots.filter(Boolean).slice(0,4).map((shot,index)=><img key={index} src={shot} alt="" />)}</div>}
-          <p>{conflict.local?.room?.role==='guest'?'Your creator covers this session.':'No points have been used for this session yet.'}{conflict.roomEnded?' This duo booth has ended (it expired or your person closed it), so it cannot be resumed. Start a new session to create a new booth.':conflict.duo&&!conflict.local?' This duo booth was opened on another device, so it cannot be resumed here, but you can close it and start again.':''}</p>
-          {(conflict.local?!conflict.roomEnded:!conflict.duo)&&<button className="primary" disabled={resuming} onClick={()=>void resumeConflict()}>{resuming?'Resuming…':'Resume existing session'}</button>}
-          <button className="text-button" disabled={resuming} onClick={()=>setConfirmNew({open:true,busy:false,error:''})}>Start a new session</button>
-          {conflict.error&&<p role="alert" className="room-error">{conflict.error}{needsPoints(conflict.error)&&<> <a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a></>}</p>}
-        </div>}
         {active&&savedDraft&&<div className="session-note recovery-panel"><p>A previous photocard is saved on this device.</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:'Could not resume.');}}}>Resume saved editing</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError("Could not delete the saved copy. Please try again."));setSavedDraft(null);}}>Delete saved copy</button><WarningNotice>{sharedError}</WarningNotice></div>}
         {active&&['session','upload','design','export'].includes(step)&&<details className="session-note recovery-panel recovery-options"><summary>{saveRecovery ? "Auto-save on this device" : "Auto-save is off"}</summary><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setRecoveryMessage('Saved copy removed.');}}}/><span>Automatically save editing on this device</span></label><p>Enabled by default so refreshing restores your editing. Photos stay on this device for up to 24 hours. Leaving the booth deletes the saved copy.</p></details>}{active&&recoveryMessage&&<p className="session-note recovery-status" role="status">{recoveryMessage}</p>}
-        {/* The top-up link only appears for points problems; other errors (e.g. an active booth) get the resume panel instead. */}
-        {active && !confirmation.open && !conflict && charge.error && <WarningNotice title="Before you continue"><p>{charge.error}</p>{needsPoints(charge.error) && <><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></>}</WarningNotice>}
+        {/* Points problems get the top-up link; an "active booth" refusal opens the booth popup instead (fallback text if it cannot be found). */}
+        {active && !confirmation.open && !conflict && !checkingConflict && charge.error && <WarningNotice title={/active booth/i.test(charge.error) ? 'You already have a booth open' : 'Before you continue'}>
+          {/active booth/i.test(charge.error) ? <p>We could not reopen it from here. It closes by itself 45 minutes after it started, and nothing was charged for it. Open My account to go back to it, or try again in a few minutes.</p> : <p>{charge.error}</p>}
+          {needsPoints(charge.error) && <><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></>}</WarningNotice>}
         {active && ['session','upload','design','export'].includes(step) && <div className="session-note" aria-live="polite">
           {party.room?.role === 'guest' ? 'Your creator covers this session. No points or free trial are used from your account.' : charge.busy ? 'Confirming your session…' : charge.receipt || 'Nothing is deducted until you confirm that you’re ready to edit. Your free trial is used first, otherwise 100 points.'}
         </div>}
@@ -449,9 +477,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         {showSteps && editingApproved && (step === 'design' || step === 'export') && <><EditScreen stage={step} onContinue={() => setStep('export')} photosLocked={restored || party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => void retakeFromEdit(null)} onDesign={() => setStep('design')} /><WarningNotice>{sharedError}</WarningNotice></>}
       </div>
     </section>
-    <BoothDialog open={active && confirmNew.open && !!conflict} title="Start a new session?" cancelLabel="Keep my session" confirmLabel="Start new session" busy={confirmNew.busy} error={confirmNew.error} onCancel={() => setConfirmNew({open:false,busy:false,error:''})} onConfirm={() => void startNewSession()}>
-      <p>Your unfinished session will be closed. No points have been used for it{conflict?.local?.photosSaved && conflict.local.card.shots.some(Boolean) ? ', and the photos saved for it on this device will be deleted' : ''}.</p>
-    </BoothDialog>
+    <ActiveBoothDialog open={active && !!conflict} info={conflict ? boothInfo(conflict) : null} continueAfterClose={conflict?.origin === 'start'} busy={resuming || closing} error={conflict?.error} onResume={() => void resumeConflict()} onClose={() => void startNewSession()} />
     <Instructions open={active && !savedDraft && !conflict && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
     <div id="print-sheet" aria-hidden="true" />
     <LeaveDialog duo={duoActive} open={!!pendingLeave} count={duoUploads.some(Boolean) ? duoUploads.filter(Boolean).length : card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); void duoControl.current?.({type:'leave'}).catch(() => {}); clearPhotos(); proceed?.(); }} />

@@ -6,6 +6,7 @@ import { authRedirect, googleAvailable, supabase } from './client';
 import './account.css';
 import { authErrorMessage } from './errors';
 import { Wallet } from './Wallet';
+import { BoothInProgress } from './BoothInProgress';
 import { GoogleAccount } from './GoogleAccount';
 import { Captcha, captchaKey } from './Captcha';
 import { readBoothReturn } from './inviteReturn.js';
@@ -81,6 +82,7 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
     <div className="account-panel">
       {loading ? <p role="status">Checking your account…</p> : !supabase ? <WarningNotice>Account sign-in is not configured yet. Please try again later.</WarningNotice> : user && !update ? <>
         <span className="eyebrow">SIGNED IN AS</span><p className="account-email">{user.email}</p>
+        {page === 'overview' && <BoothInProgress key={`booth-${user.id}`} userId={user.id} />}
         <Wallet key={user.id} userId={user.id} />
         <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional navigation hint. */ } }}>Take the photos now</a>
         <button className="text-button" disabled={busy} onClick={() => void run(async () => { const { error } = await supabase!.auth.signOut({ scope: 'local' }); if (error) setError('We couldn’t sign you out. Please try again.'); })}>Sign out</button>

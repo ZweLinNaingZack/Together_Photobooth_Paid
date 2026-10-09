@@ -159,3 +159,10 @@
  .receipt-upload{padding:20px 16px}
  .topup-checkout>button{max-width:100%;white-space:normal;line-height:1.5}
 }
+
+/* Leads back to an unfinished booth; sits above the wallet so it is the first thing seen. */
+.booth-progress-card{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:24px 0;border-color:#d8b9bd;background:#f6ece9}
+.booth-progress-card h2{margin:0 0 6px}
+.booth-progress-card p{margin:0;color:var(--muted);line-height:1.6}
+.booth-progress-card .primary{flex-shrink:0}
+@media(max-width:600px){.booth-progress-card{flex-direction:column;align-items:stretch}}

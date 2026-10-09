@@ -12,7 +12,7 @@ import {reconcileOffsets} from '../src/booth/photoPosition.js';
 const compiled=ts.transpileModule(await readFile(new URL('../src/booth/Booth.tsx',import.meta.url),'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022},
 }).outputText;
-function harness({cost=100,role='host',invite=null,user=null,draft=null,storageFailure=false,active=null,server=null,roomGone=false,partnerOnline=true}={}) {
+function harness({cost=100,role='host',invite=null,user=null,draft=null,storageFailure=false,active=null,server=null,roomGone=false,partnerOnline=true,mine=null}={}) {
   const store={active,activeSaves:[]}, adopted=[], released=[], adoptedRooms=[], resumed=[], joins=[];
   class RoomRequestError extends Error{constructor(message,status=0){super(message);this.status=status;}}
   const cells=[], hooks=[]; let cursor=0, dirty=false, effects=[], tree, debits=0, commit;
@@ -22,6 +22,7 @@ function harness({cost=100,role='host',invite=null,user=null,draft=null,storageF
     end(){this.room=null;},
     async create(settings){this.room={code:'ABCDEF',token:'host-token',role,settings,host:{online:true,ready:true},guest:{online:false,ready:false},bothReady:false};return this.room;},
     async join(...args){joins.push(args);return this.create({layout:'A',template:null,source:'camera'});},
+    async findMine(){return mine;},
     async resume(saved){resumed.push(saved);if(roomGone)throw new RoomRequestError('This booth has ended or expired.',404);
       this.room={code:saved.code,token:saved.token,role:saved.role,settings:{layout:'A',template:null,source:'camera'},host:{online:true,ready:true},guest:{online:partnerOnline,ready:true},bothReady:partnerOnline};return this.room;},
     async check(){return this.room;}, async ready(){},
@@ -237,38 +238,6 @@ test('a camera session comes back to the camera step',async()=>{
  const ui=harness({user:{id:'alice'},active:savedSolo({source:'camera',step:'session'})});ui.render();await ui.flush();
  assert.ok(ui.find('SessionScreen'));assert.equal(ui.find('SessionScreen').card.shots.length,2);
 });
-test('when automatic resume fails the user can resume later or deliberately start new',async()=>{
- const ui=harness({user:{id:'alice'},active:savedSolo()});
- ui.charge.adopt=async()=>{throw Error('You need 100 points to start this session. Please top up your account.');};
- ui.render();await ui.flush();
- assert.ok(ui.find('button',p=>p.children==='Resume existing session'));
- assert.equal(ui.find('ModeScreen'),undefined,'step screens are hidden so saved photos cannot be wiped by accident');
- ui.find('button',p=>p.children==='Start a new session').onClick();
- const dialog=ui.find('BoothDialog',p=>p.title==='Start a new session?');assert.equal(dialog.open,true);
- await dialog.onConfirm();await ui.flush();
- assert.deepEqual(ui.released,['held-session']);assert.equal(ui.store.active,null);
- assert.ok(ui.find('ModeScreen'));assert.equal(ui.debits(),0);
-});
-test('a session known only to the server can be resumed from the booth entry',async()=>{
- const ui=harness({user:{id:'alice'},server:{sessionId:'server-session',duo:false,usedTrial:false}});ui.render();await ui.flush();
- await ui.find('button',p=>p.children==='Resume existing session').onClick();await ui.flush();
- assert.deepEqual(ui.adopted,['server-session']);assert.ok(ui.find('SourceScreen'));assert.equal(ui.debits(),0);
-});
-test('an "active booth" refusal opens the resume panel instead of a top-up dead end',async()=>{
- const ui=harness({user:{id:'alice'},server:{sessionId:'server-session',duo:false,usedTrial:false}});
- ui.find('Instructions').onContinue();await ui.flush();
- ui.find('button',p=>p.children==='Start a new session').onClick();await ui.find('BoothDialog',p=>p.title==='Start a new session?').onConfirm();await ui.flush();
- ui.released.length=0;
- ui.charge.reserve=async()=>{ui.charge.error='You already have an active booth. Leave that booth first, or wait for its reservation to expire.';throw new Error(ui.charge.error);};
- await ui.start('solo','upload');await ui.flush();
- assert.ok(ui.find('button',p=>p.children==='Resume existing session'));
- assert.equal(ui.find('WarningNotice',p=>p.title==='Before you continue'),undefined);
-});
-test('a duo reservation is not resumed as Solo but can be closed',async()=>{
- const ui=harness({user:{id:'alice'},server:{sessionId:'duo-session',duo:true,usedTrial:false}});ui.render();await ui.flush();
- assert.equal(ui.find('button',p=>p.children==='Resume existing session'),undefined);
- assert.ok(ui.find('button',p=>p.children==='Start a new session'));
-});
 test('confirming editing replaces the pre-edit record with the editing draft',async()=>{
  const ui=harness({user:{id:'alice'}});await ui.start('solo','upload');
  ui.find('UploadScreen').onPhotos(['one','two','three']);await ui.flush();assert.ok(ui.store.active);
@@ -314,13 +283,6 @@ test('if the partner is not back yet the host waits in the room',async()=>{
  const ui=harness({user:{id:'host'},active:savedDuo(hostSeat),partnerOnline:false});ui.render();await ui.flush();
  assert.ok(ui.find('WaitingRoom'));assert.equal(ui.find('SessionScreen'),undefined);
 });
-test('an ended Duo room cannot be resumed; the host can close the reservation and start again',async()=>{
- const ui=harness({user:{id:'host'},active:savedDuo(hostSeat),roomGone:true});ui.render();await ui.flush();
- assert.equal(ui.find('button',p=>p.children==='Resume existing session'),undefined);
- ui.find('button',p=>p.children==='Start a new session').onClick();
- await ui.find('BoothDialog',p=>p.title==='Start a new session?').onConfirm();await ui.flush();
- assert.deepEqual(ui.released,['held-session']);assert.equal(ui.store.active,null);assert.ok(ui.find('ModeScreen'));
-});
 test('a refreshed Duo guest reconnects and is never billed',async()=>{
  const ui=harness({user:{id:'guest'},role:'guest',active:savedDuo(guestSeat)});ui.charge.adopt=async()=>{throw Error('Guest must not be billed');};
  ui.render();await ui.flush();
@@ -335,7 +297,7 @@ test('a guest refreshing on the invite link reconnects to their seat instead of 
 test('a guest whose room ended is told plainly and their saved seat is removed',async()=>{
  const ui=harness({user:{id:'guest'},role:'guest',active:savedDuo(guestSeat),roomGone:true});ui.render();await ui.flush();
  assert.equal(ui.store.active,null);assert.ok(ui.find('ModeScreen'));
- assert.equal(ui.find('button',p=>p.children==='Resume existing session'),undefined);
+ assert.equal(ui.find('ActiveBoothDialog').open,false);
 });
 test('Duo upload photos for both sides are saved and restored',async()=>{
  const ui=harness({user:{id:'alice'}});await ui.start('duo','upload');
@@ -344,4 +306,68 @@ test('Duo upload photos for both sides are saved and restored',async()=>{
  const saved=ui.store.active;
  const again=harness({user:{id:'alice'},active:saved});again.render();await again.flush();
  assert.equal(JSON.stringify(again.find('DuoUploadScreen').photos),'["a1","a2","","b1"]');assert.equal(again.debits(),0);
+});
+
+// ---------------------------------------------------------------------------
+// The unfinished-booth popup
+// ---------------------------------------------------------------------------
+const popup=ui=>ui.find('ActiveBoothDialog');
+test('when automatic resume fails the popup offers going back or closing it',async()=>{
+ const ui=harness({user:{id:'alice'},active:savedSolo()});
+ ui.charge.adopt=async()=>{throw Error('You need 100 points to start this session. Please top up your account.');};
+ ui.render();await ui.flush();
+ assert.equal(popup(ui).open,true);assert.equal(popup(ui).info.kind,'solo-upload');assert.equal(popup(ui).info.hasSavedPhotos,true,'closing asks first because photos would be deleted');
+ assert.match(popup(ui).error,/100 points/);
+ assert.equal(ui.find('ModeScreen'),undefined,'step screens are hidden so saved photos cannot be wiped by accident');
+ await popup(ui).onClose();await ui.flush();
+ assert.deepEqual(ui.released,['held-session']);assert.equal(ui.store.active,null);
+ assert.equal(popup(ui).open,false);assert.ok(ui.find('ModeScreen'));assert.equal(ui.debits(),0);
+});
+test('a booth known only to the server can be reopened from the popup',async()=>{
+ const ui=harness({user:{id:'alice'},server:{sessionId:'server-session',duo:false,usedTrial:false,expiresAt:new Date().toISOString()}});ui.render();await ui.flush();
+ assert.equal(popup(ui).info.kind,'solo-unknown');assert.ok(popup(ui).info.heldUntil);
+ await popup(ui).onResume();await ui.flush();
+ assert.deepEqual(ui.adopted,['server-session']);assert.ok(ui.find('SourceScreen'));assert.equal(popup(ui).open,false);
+});
+test('an "active booth" refusal opens the popup, and closing the old booth continues into the new one',async()=>{
+ const ui=harness({user:{id:'alice'}});
+ let refusals=1,reserves=0;
+ ui.charge.reserve=async()=>{reserves++;if(refusals-->0){ui.charge.error='You already have an active booth. Leave that booth first, or wait for its reservation to expire.';throw new Error(ui.charge.error);}};
+ ui.charge.findActive=async()=>({sessionId:'old-session',duo:false,usedTrial:false});
+ await ui.start('solo','upload');await ui.flush();
+ assert.equal(popup(ui).open,true);assert.equal(popup(ui).continueAfterClose,true);
+ assert.equal(ui.find('WarningNotice',p=>/booth/i.test(p.title||'')||p.title==='Before you continue'),undefined,'no dead-end message');
+ await popup(ui).onClose();await ui.flush();
+ assert.deepEqual(ui.released,['old-session']);assert.equal(reserves,2,'the new booth is started again automatically');
+ assert.ok(ui.find('UploadScreen'));assert.equal(ui.debits(),0);
+});
+test('without the lookup the refusal explains what to do in plain words',async()=>{
+ const ui=harness({user:{id:'alice'}});
+ ui.charge.reserve=async()=>{ui.charge.error='You already have an active booth. Leave that booth first, or wait for its reservation to expire.';throw new Error(ui.charge.error);};
+ await ui.start('solo','upload');await ui.flush();
+ const notice=ui.find('WarningNotice',p=>p.title==='You already have a booth open');assert.ok(notice);
+ assert.match(JSON.stringify(notice.children),/My account/);assert.doesNotMatch(JSON.stringify(notice.children),/top up/i);
+});
+test('a duo hold whose room has closed can only be released',async()=>{
+ const ui=harness({user:{id:'host'},server:{sessionId:'duo-session',duo:true,usedTrial:false}});ui.render();await ui.flush();
+ assert.equal(popup(ui).info.ended,true);
+ await popup(ui).onClose();await ui.flush();assert.deepEqual(ui.released,['duo-session']);
+});
+test('a duo hold whose room is still open is reopened with the seat the server returns',async()=>{
+ const ui=harness({user:{id:'host'},server:{sessionId:'duo-session',duo:true,usedTrial:false},mine:hostSeat});ui.render();await ui.flush();
+ assert.equal(popup(ui).info.kind,'duo-host');assert.equal(popup(ui).info.roomCode,'ABCDEF');assert.equal(popup(ui).info.ended,false);
+ await popup(ui).onResume();await ui.flush();
+ assert.equal(ui.resumed[0].token,hostSeat.token);assert.deepEqual(ui.adoptedRooms,['ABCDEF']);
+ assert.ok(ui.find('WaitingRoom'),'with no saved copy we cannot know they were capturing, so they rejoin in the waiting room');
+});
+test('an ended saved Duo room shows the release choice for the host',async()=>{
+ const ui=harness({user:{id:'host'},active:savedDuo(hostSeat),roomGone:true});ui.render();await ui.flush();
+ assert.equal(popup(ui).info.ended,true);
+ await popup(ui).onClose();await ui.flush();
+ assert.deepEqual(ui.released,['held-session']);assert.equal(ui.store.active,null);assert.ok(ui.find('ModeScreen'));
+});
+test('a guest who lost the saved copy can reopen their open seat',async()=>{
+ const ui=harness({user:{id:'guest'},role:'guest',mine:guestSeat});ui.render();await ui.flush();
+ assert.equal(popup(ui).info.kind,'duo-guest');assert.equal(popup(ui).info.guest,true);
+ await popup(ui).onResume();await ui.flush();assert.equal(ui.resumed[0].role,'guest');assert.ok(ui.find('WaitingRoom'));assert.equal(ui.debits(),0);
 });

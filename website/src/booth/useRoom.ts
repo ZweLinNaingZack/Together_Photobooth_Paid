@@ -29,6 +29,16 @@ export function useRoom(keepOnHide?: RefObject<boolean>) {
       save(session); return session;
     } finally { if (id === generation.current) { lock.current = false; setBusy(false); } }
   }
+  /**
+   * Ask the server for this account's own open room seat (hosted rooms only). Used when this
+   * device lost its saved copy. Returns null when there is none or the service cannot tell.
+   */
+  async function findMine(): Promise<SavedRoom | null> {
+    try {
+      const { room } = await roomRequest<{ room: SavedRoom | null }>('mine', {});
+      return room && typeof room.code === 'string' && typeof room.token === 'string' && (room.role === 'host' || room.role === 'guest') ? room : null;
+    } catch { return null; }
+  }
   useEffect(() => {
     const hide = () => { if (keepOnHide?.current) suspend(); else end(); };
     window.addEventListener('pagehide', hide);
@@ -75,5 +85,5 @@ export function useRoom(keepOnHide?: RefObject<boolean>) {
     } catch (e) { if (id === generation.current) { setError(e instanceof Error ? e.message : 'Could not update readiness.'); } return null; }
     finally { if (id === generation.current) { lock.current = false; setBusy(false); } }
   }
-  return { room, busy, error, ended, end, resume, create: (settings: RoomSettings) => enter('create', { settings }), join: (code: string, invite: string | null) => enter('join', invite ? { invite } : { code }), ready: (value: boolean) => update(value), check: () => update() };
+  return { room, busy, error, ended, end, resume, findMine, create: (settings: RoomSettings) => enter('create', { settings }), join: (code: string, invite: string | null) => enter('join', invite ? { invite } : { code }), ready: (value: boolean) => update(value), check: () => update() };
 }

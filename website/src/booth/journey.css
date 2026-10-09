@@ -102,10 +102,23 @@
 .customization-grid.export-preview-grid{display:block;margin-inline:auto;width:100%}
 .export-preview-grid .preview-workspace{position:static}
 .export-preview-grid .final-preview{height:clamp(320px,60svh,620px);max-height:none}
-/* Unfinished-session panel: shows which session will be resumed. */
-.resume-panel:focus{outline:none}
-.resume-panel:focus-visible{outline:3px solid #576f92;outline-offset:4px}
-.resume-panel .resume-title{color:var(--ink);font-size:16px}
-.resume-thumbs{display:flex;gap:8px;flex-basis:100%}
-.resume-thumbs img{width:74px;aspect-ratio:3/2;object-fit:cover;border:1px solid var(--line);border-radius:4px}
-.resume-panel .room-error{text-align:left}
+/* Unfinished-booth popup: same family as the other booth dialogs, with a miniature of the user's card. */
+.active-booth-dialog{width:min(470px,calc(100% - 32px))}
+.booth-miniature{position:relative;display:block;margin:4px auto 0;background:#faf6ea;box-shadow:2px 7px 14px #25282322;transform:rotate(-4deg)}
+.booth-miniature-slot{position:absolute;overflow:hidden;background:#bec5b6;border:1px solid #b3bdab}
+.booth-miniature-slot img{display:block;width:100%;height:100%;object-fit:cover}
+.booth-miniature-caption{position:absolute;display:flex;align-items:center;justify-content:center}
+.booth-miniature-caption::after{content:"";width:60%;height:2px;border-radius:2px;background:var(--red);opacity:.55}
+.active-booth-dialog h2{margin:22px 0 10px;font-size:clamp(28px,5vw,36px);text-wrap:balance}
+.active-booth-lead{margin:0 auto;max-width:40ch;font-size:15px;text-wrap:pretty;line-height:1.7;color:var(--muted)}
+.active-booth-facts{margin:24px 0 0;padding:6px 18px;border-radius:10px;background:#e9ece2;text-align:left}
+.active-booth-facts>div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)}
+.active-booth-facts>div:last-child{border-bottom:0}
+.active-booth-facts dt{color:var(--muted);font-size:14px}
+.active-booth-facts dd{margin:0;color:var(--ink);font-size:14px;font-weight:500;text-align:right}
+.active-booth-code{letter-spacing:.18em}
+.active-booth-actions{display:grid;gap:10px;margin-top:24px}
+.active-booth-actions button{width:100%;justify-content:center}
+.active-booth-dialog .room-error{margin:16px 0 0}
+@media(max-width:600px){.active-booth-facts{padding:4px 14px}}
+@media(max-width:340px){.active-booth-facts>div{flex-direction:column;gap:2px}.active-booth-facts dd{text-align:left}}

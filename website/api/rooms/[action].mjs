@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHostedRoomService, supabaseRoomStore } from '../../server/hosted-rooms.mjs';
-const actions = new Set(['create','join','ready','state','leave','signal','signals','rtc']);
+const actions = new Set(['create','join','ready','state','leave','signal','signals','rtc','mine']);
 export default async function handler(req,res) {
   res.setHeader('Cache-Control','no-store');
   res.setHeader('Content-Type','application/json');

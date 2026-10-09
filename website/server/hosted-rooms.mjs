@@ -7,6 +7,22 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
     // Two devices may use the same account; allow both heartbeat/signaling loops.
     if (!await store.limit(`${userId}:all`, 600)) throw fail('Too many requests. Please wait a minute.', 429);
     if (['create','join','rtc'].includes(action) && !await store.limit(`${userId}:${action}`,20)) throw fail('Too many attempts. Please wait a minute.',429);
+    // Return this account's own open seat so a device that lost its saved copy can reconnect.
+    // Only rooms where this user is the host or guest are considered, and only their own token is returned.
+    if (action === 'mine') {
+      if (!store.findMine) return { room: null };
+      for (const row of await store.findMine(userId)) {
+        const room = row?.data;
+        const role = room?.host?.userId === userId ? 'host' : room?.guest?.userId === userId ? 'guest' : null;
+        if (!role) continue;
+        try {
+          // Reuse the room rules: an expired room, or one whose host has been gone over 60 s, throws here.
+          createRoomService({ rooms: new Map([[room.code, structuredClone(room)]]), rtcConfig }).run('state', { code: room.code, token: room[role].token }, userId);
+          return { room: { code: room.code, token: room[role].token, role, ...(role === 'host' ? { invite: room.invite } : {}) } };
+        } catch { /* closed room: try the next one */ }
+      }
+      return { room: null };
+    }
     for (let attempt = 0; attempt < 8; attempt++) {
       const row = action === 'create' ? null : await store.load(body);
       const room = row?.data;
@@ -48,6 +64,14 @@ export function supabaseRoomStore(client) {
     async limit(bucket,maximum) {
       const { data,error } = await client.rpc('together_room_limit',{bucket,maximum});
       if (error) throw error; return data;
+    },
+    async findMine(userId) {
+      const rows = [];
+      for (const path of ['data->host->>userId', 'data->guest->>userId']) {
+        const { data, error } = await client.from('together_rooms').select('data,version').eq(path, userId).gt('expires_at', new Date().toISOString()).limit(3);
+        if (error) throw error; rows.push(...(data || []));
+      }
+      return rows;
     },
     async load(body) {
       const query = client.from('together_rooms').select('data,version');
