@@ -102,3 +102,10 @@
 .customization-grid.export-preview-grid{display:block;margin-inline:auto;width:100%}
 .export-preview-grid .preview-workspace{position:static}
 .export-preview-grid .final-preview{height:clamp(320px,60svh,620px);max-height:none}
+/* Unfinished-session panel: shows which session will be resumed. */
+.resume-panel:focus{outline:none}
+.resume-panel:focus-visible{outline:3px solid #576f92;outline-offset:4px}
+.resume-panel .resume-title{color:var(--ink);font-size:16px}
+.resume-thumbs{display:flex;gap:8px;flex-basis:100%}
+.resume-thumbs img{width:74px;aspect-ratio:3/2;object-fit:cover;border:1px solid var(--line);border-radius:4px}
+.resume-panel .room-error{text-align:left}

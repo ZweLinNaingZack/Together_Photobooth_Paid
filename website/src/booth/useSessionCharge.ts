@@ -22,6 +22,46 @@ export function useSessionCharge() {
     if(error||!data?.completed)throw new Error('We could not verify this paid session. Your saved photos have been kept. Please try again.');
     id.current=data.session_id;settled.current=true;setReceipt('Resumed session. Editing and downloads are already covered.');setCost(data.used_trial?0:100);
   }
+  /**
+   * Re-attach this tab to a reservation made before a refresh/tab close.
+   * Reserving with the SAME id is idempotent on the server: it returns the
+   * existing hold, re-holds it if it expired (no charge), or reports it as
+   * already paid. It never creates a second booth or a second charge.
+   * For a duo host the room must still exist and belong to this user.
+   */
+  async function adopt(sessionId: string, roomCode: string | null = null) {
+    generation.current++; reservePending.current = null; pending.current = null;
+    id.current = sessionId; settled.current = false;
+    setReceipt('');
+    await reserve(roomCode);   // duo hosts pass their room code; the server checks it matches this reservation
+    if (settled.current) setReceipt('Resumed session. Editing and downloads are already covered.');
+  }
+  /**
+   * Drop the local id WITHOUT releasing the server reservation. Used when the
+   * page is being left (refresh, tab close) so the booth can be resumed later.
+   */
+  function forget() {
+    generation.current++; reservePending.current = null; pending.current = null;
+    id.current = crypto.randomUUID(); settled.current = false;
+    setBusy(false); setError(''); setReceipt('');
+    costRef.current = null; setCost(null);
+  }
+  /** Ask the server for this user's unfinished reservation (migration 019). */
+  async function findActive(): Promise<ActiveReservation | null> {
+    if (!supabase) return null;
+    const { data, error } = await supabase.rpc('together_active_session');
+    // A missing function (019 not run yet) or a network error just means "nothing to offer".
+    if (error || !data || typeof data.session_id !== 'string') return null;
+    return { sessionId: data.session_id, usedTrial: !!data.used_trial, duo: !!data.duo, expiresAt: data.expires_at, createdAt: data.created_at };
+  }
+  /** Close a specific unconfirmed reservation. Paid sessions are never affected by 'release'. */
+  async function release(sessionId: string) {
+    if (!supabase) throw new Error('Please sign in first.');
+    const { error } = await supabase.rpc('together_session_action', { request_id: sessionId, operation: 'release' });
+    if (error) throw new Error('We could not close that session. Please check your connection and try again.');
+  }
+  /** Hide an error once the UI shows a better, specific message for it. */
+  function clearError() { setError(''); }
   useEffect(() => () => { generation.current++; void supabase?.rpc('together_session_action', { request_id: id.current, operation: 'release' }).then(() => {}, () => {}); }, []);
   function reserve(roomCode: string | null = null): Promise<void> {
     if (settled.current) return Promise.resolve();
@@ -71,5 +111,8 @@ export function useSessionCharge() {
     pending.current = task;
     return task;
   }
-  return { complete, reserve, reset, resume, sessionId:id.current, busy, error, receipt, cost };
+  return { complete, reserve, reset, resume, adopt, forget, findActive, release, clearError, sessionId:id.current, busy, error, receipt, cost };
 }
+
+/** An unfinished booth reservation as reported by the server. */
+export interface ActiveReservation { sessionId: string; usedTrial: boolean; duo: boolean; expiresAt?: string; createdAt?: string }

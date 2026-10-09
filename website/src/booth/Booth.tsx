@@ -21,24 +21,55 @@ import { DuoChoice } from './DuoChoice';
 import { JoinRoom } from './JoinRoom';
 import { WaitingRoom } from './WaitingRoom';
 import { useRoom } from './useRoom';
+import type { SavedRoom } from './useRoom';
+import { RoomRequestError } from './rooms';
 import type { DuoEvent } from './useDuoPeer';
 import { useSessionCharge } from './useSessionCharge';
+import type { ActiveReservation } from './useSessionCharge';
 import './journey.css';
 import { prefetchFrames } from './frameAssets';
 import { reconcileOffsets } from './photoPosition.js';
 import { useAuth } from '../auth/AuthProvider';
-import { readDraft,saveDraft,deleteDraft } from './recoveryStore.js';
+import { readDraft,saveDraft,deleteDraft,readActiveSession,saveActiveSession,deleteActiveSession } from './recoveryStore.js';
+
+/**
+ * A "Your photos" session saved on this device before editing is confirmed.
+ * - Solo:        step 'session' (camera) or 'upload'
+ * - Duo room:    step 'room' (waiting) or 'session' (live cameras), with this person's room credentials
+ * - Duo upload:  step 'upload', photos for both sides in duoUploads
+ * Guests have no reservation (sessionId is ''), because only the host pays.
+ */
+interface ActiveRecord { sessionId: string; mode: BoothMode; source: 'camera' | 'upload'; step: 'session' | 'upload' | 'room'; card: CardState; photosSaved: boolean; room?: SavedRoom; duoUploads?: string[]; savedAt?: number }
+/** An unfinished session the user can resume or close. `local` is set when this device also has it saved. */
+type SessionConflict = Pick<ActiveReservation, 'sessionId' | 'duo' | 'expiresAt' | 'createdAt'> & { local: ActiveRecord | null; roomEnded?: boolean; error?: string };
+/** One line that tells the user which saved session this is. */
+function describeRecord(record: ActiveRecord) {
+  const count = layouts[record.card.layout].count;
+  if (record.room) return `Duo · ${record.room.role === 'host' ? 'Booth you created' : 'Booth you joined'} · code ${record.room.code} · Layout ${record.card.layout}`;
+  if (record.mode === 'duo') return `Duo · Upload photos · Layout ${record.card.layout} · ${(record.duoUploads || []).filter(Boolean).length} of ${count * 2} photos saved on this device`;
+  return `Solo · ${record.source === 'upload' ? 'Upload photos' : 'Take photos'} · Layout ${record.card.layout} · ${record.card.shots.filter(Boolean).length} of ${count} photos saved on this device`;
+}
+const roomGone = (error: unknown) => error instanceof RoomRequestError && (error.status === 403 || error.status === 404);
+const shortTime = (value?: string | number) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+const needsPoints = (message?: string) => !!message && /points|top up/i.test(message);
 
 const progress: [Step, string][] = [['mode', 'Solo or duo'], ['source', 'Photo source'], ['layout', 'Your layout'], ['session', 'Your photos'], ['design', 'Frame & filter'], ['export', 'Export & download']];
 
 export function Booth({ active, invite, leaveGuard }: { active: boolean; invite: string | null; leaveGuard: RefObject<(proceed: () => void) => void> }) {
-  const party = useRoom();
+  const activeSaved=useRef(false);          // true once this tab's active session is stored on the device
+  const party = useRoom(activeSaved);        // a saved session keeps its room open across a refresh
   const charge = useSessionCharge();
   const {user}=useAuth();
   const [saveRecovery,setSaveRecovery]=useState(true),[savedDraft,setSavedDraft]=useState<any>(null),[recoveryMessage,setRecoveryMessage]=useState('');
   const [restored,setRestored]=useState(false);
   const recoveredGuest=useRef(false);
   const recoveryWrites=useRef(Promise.resolve());
+  // Unfinished-session recovery (before editing is confirmed).
+  const [conflict,setConflict]=useState<SessionConflict|null>(null);
+  const [resuming,setResuming]=useState(false);
+  const [confirmNew,setConfirmNew]=useState({open:false,busy:false,error:''});
+  const [recheck,setRecheck]=useState(0);   // bumped when the page comes back from the browser's back/forward cache
+  const conflictPanel=useRef<HTMLDivElement>(null);
   const duoControl = useRef<((event: DuoEvent) => Promise<void>) | null>(null);
   const [sharedError, setSharedError] = useState('');
   const [useInvite, setUseInvite] = useState(true);
@@ -74,23 +105,161 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     const task=recoveryWrites.current.catch(()=>{}).then(()=>saveDraft(user.id,draft));recoveryWrites.current=task;
     return task.then(()=>setRecoveryMessage('Recovery copy saved on this device for 24 hours.')).catch(()=>{setRecoveryMessage('This browser could not save recovery. Keep this tab open until you download.');if(required)throw new Error('Recovery could not be saved. Free some device storage or turn off recovery before continuing. No new charge was made.');});
   }
+  // Put a saved "Your photos" session back on screen (after its reservation/room was reattached).
+  function applyRecord(record: ActiveRecord, step: Step = record.step) {
+    recoveredGuest.current=false; setRestored(false);
+    setMode(record.mode); setSource(record.source);
+    setCard(current=>({...current,...record.card}));
+    setDuoUploads(record.duoUploads||[]);
+    setSaveRecovery(record.photosSaved); setEditingApproved(false);
+    setRetake(null); setRestoreCamera(false); setInstructions(false); setConflict(null);
+    setStep(step);
+    const welcome = record.room ? 'Welcome back. You are reconnected to your duo booth.' : 'Welcome back. Your session was restored.';
+    setRecoveryMessage(record.photosSaved ? `${welcome} Your photos were kept.` : `${welcome} Auto-save was off, so please take or choose your photos again.`);
+  }
+  /**
+   * Reattach everything a saved session needs, then show it.
+   * Duo room: reconnect to the room first (proves it still exists), then the host
+   * re-holds the same reservation for that room. Guests are never billed.
+   * Throws if the room has ended (see roomGone) or the reservation cannot be held.
+   */
+  async function resumeRecord(record: ActiveRecord) {
+    if (record.room) {
+      const room = await party.resume(record.room);
+      if (record.room.role === 'host') {
+        // If this fails, the room stays connected so "Start a new session" can close it properly.
+        await charge.adopt(record.sessionId, room.code);
+      }
+      // Go back to live cameras only if the partner is still there; otherwise wait in the room for them.
+      applyRecord({ ...record, card: { ...record.card, layout: room.settings.layout } }, record.step === 'session' && room.guest.online && room.host.online ? 'session' : 'room');
+      return;
+    }
+    await charge.adopt(record.sessionId);   // same reservation id: no new booth, no charge
+    applyRecord(record);
+  }
+  // Decide what to show when a saved session could not be reattached automatically.
+  function resumeFailed(record: ActiveRecord, error: unknown) {
+    charge.clearError();
+    const ended = !!record.room && roomGone(error);
+    if (ended && record.room?.role === 'guest') {
+      // Nothing to keep: the guest has no reservation and the room is gone.
+      if (user) recoveryWrites.current = recoveryWrites.current.catch(()=>{}).then(()=>deleteActiveSession(user.id)).catch(()=>{});
+      activeSaved.current = false; setConflict(null); setStep('mode');
+      setRecoveryMessage('The duo booth you were in has ended. Ask your person for a new invitation.');
+      return;
+    }
+    setConflict({ sessionId: record.sessionId, duo: record.mode === 'duo', local: record, roomEnded: ended,
+      error: ended ? undefined : error instanceof Error ? error.message : 'We could not resume this session automatically.' });
+  }
+  // On opening the booth, restore in this order (only one of these exists at a time):
+  //   1. a paid editing draft            → Frame & filter / Export   (existing behaviour)
+  //   2. an unconfirmed session on device → Your photos / duo room, same reservation
+  //   3. a reservation only the server knows about → "Resume existing session" panel
   useEffect(()=>{
-    if(!user||!active||invite)return;
+    if(!user||!active||invite)return;   // invite links are handled by the join effect below
     let cancelled=false;
-    void readDraft(user.id).then(async draft=>{
-      if(cancelled||!draft)return;
-      setSavedDraft(draft);
-      // Older opt-in drafts and pre-payment backups remain manually resumable.
-      if(!draft.editingApproved)return;
-      if(!draft.guest)await charge.resume(draft.sessionId);
+    void (async()=>{
+      let draft:any=null;
+      try{draft=await readDraft(user.id);}catch{/* storage unavailable: fall through */}
       if(cancelled)return;
-      recoveredGuest.current=!!draft.guest;setRestored(true);setCard(draft.card);
-      setSource(draft.source);setMode(draft.mode);setEditingApproved(true);
-      setStep(draft.step==='export'?'export':'design');setInstructions(false);setSavedDraft(null);
-    }).catch(()=>{if(!cancelled)setSharedError('Your saved editing could not be restored automatically. Please try Resume saved editing.');});
+      let record:ActiveRecord|null=null;
+      try{record=await readActiveSession(user.id);}catch{/* storage unavailable */}
+      if(cancelled)return;
+      // A full set of photos is also backed up as an unconfirmed editing draft. While the
+      // session is still in "Your photos", the active session record is the one to restore.
+      if(draft&&!draft.editingApproved&&record)draft=null;
+      if(draft){
+        setSavedDraft(draft);
+        // Older opt-in drafts and pre-payment backups remain manually resumable.
+        if(!draft.editingApproved)return;
+        try{if(!draft.guest)await charge.resume(draft.sessionId);}
+        catch{if(!cancelled)setSharedError('Your saved editing could not be restored automatically. Please try Resume saved editing.');return;}
+        if(cancelled)return;
+        recoveredGuest.current=!!draft.guest;setRestored(true);setCard(draft.card);
+        setSource(draft.source);setMode(draft.mode);setEditingApproved(true);
+        setStep(draft.step==='export'?'export':'design');setInstructions(false);setSavedDraft(null);
+        return;
+      }
+      if(record){
+        activeSaved.current=true;   // it is saved: another refresh must keep its room and reservation too
+        try{await resumeRecord(record);}
+        catch(e){if(!cancelled)resumeFailed(record,e);}
+        return;
+      }
+      const server=await charge.findActive().catch(()=>null);
+      if(!cancelled&&server)setConflict({...server,local:null});
+    })();
     return()=>{cancelled=true;};
-  },[user?.id,active,invite]);
+  },[user?.id,active,invite,recheck]);
   useEffect(()=>{if(saveRecovery&&hasPhotos)void persistRecovery();},[card,saveRecovery,editingApproved,step]);
+  // Save the unfinished session on this device while it is in progress.
+  // With auto-save off we still keep the session id, room and step (no photos) so it can be resumed or closed.
+  const savingSolo=mode==='solo'&&!party.room&&(step==='session'||step==='upload');
+  const savingDuoRoom=mode==='duo'&&source==='camera'&&!!party.room&&(step==='room'||step==='session');
+  const savingDuoUpload=mode==='duo'&&source==='upload'&&!party.room&&step==='upload';
+  const activeSessionOpen=active&&!!user&&!editingApproved&&(savingSolo||savingDuoRoom||savingDuoUpload);
+  const roomKey=party.room?.token;   // the room object changes every heartbeat; only a new room should trigger a save
+  useEffect(()=>{
+    if(!activeSessionOpen||!user)return;
+    const room=party.room;
+    const savedRoom:SavedRoom|undefined=room?{code:room.code,token:room.token,role:room.role,
+      // Hosts keep the invite to share again; guests keep the link they joined with, so a refresh reconnects instead of re-joining.
+      ...(room.role==='host'&&room.invite?{invite:room.invite}:room.role==='guest'&&useInvite&&invite?{invite}:{})}:undefined;
+    const record:ActiveRecord={sessionId:room?.role==='guest'?'':charge.sessionId,mode,source,
+      step:savingDuoRoom?(step==='session'?'session':'room'):source==='upload'?'upload':'session',
+      card:saveRecovery?card:{...card,shots:[],offsets:[]},photosSaved:saveRecovery,
+      ...(savedRoom?{room:savedRoom}:{}),...(savingDuoUpload?{duoUploads:saveRecovery?duoUploads:[]}:{})};
+    const task=recoveryWrites.current.catch(()=>{}).then(()=>saveActiveSession(user.id,record));
+    recoveryWrites.current=task;
+    task.then(()=>{activeSaved.current=true;},()=>setRecoveryMessage('This browser could not save your session. Keep this tab open until you finish.'));
+  },[activeSessionOpen,card,duoUploads,source,step,saveRecovery,charge.sessionId,roomKey]);
+  // Once editing is confirmed, the editing draft takes over, so the pre-edit record is removed.
+  useEffect(()=>{
+    if(!editingApproved||!user)return;
+    activeSaved.current=false;
+    recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteActiveSession(user.id)).catch(()=>{});
+  },[editingApproved,user?.id]);
+  // Bring the resume panel into view and move keyboard focus to it.
+  useEffect(()=>{if(conflict){conflictPanel.current?.focus({preventScroll:true});window.scrollTo(0,0);}},[conflict?.sessionId]);
+  async function resumeConflict(){
+    if(!conflict||resuming||conflict.roomEnded)return;
+    setResuming(true);
+    try{
+      if(conflict.local)await resumeRecord(conflict.local);
+      else{
+        await charge.adopt(conflict.sessionId);
+        // Photos for this session are not on this device: keep the held booth and continue from photo source.
+        setCard(current=>({...current,shots:[],offsets:[],template:null}));
+        setMode('solo');setRetake(null);setInstructions(false);setConflict(null);setStep('source');
+        setRecoveryMessage('Your booth is still held. Choose your photo source and layout to continue. No extra points are used.');
+      }
+    }catch(e){
+      if(conflict.local){resumeFailed(conflict.local,e);}
+      else{charge.clearError();setConflict(current=>current&&{...current,error:e instanceof Error?e.message:'We could not resume this session. Please try again.'});}
+    }finally{setResuming(false);}
+  }
+  async function startNewSession(){
+    if(!conflict||confirmNew.busy)return;
+    setConfirmNew({open:true,busy:true,error:''});
+    try{
+      // Only unconfirmed holds can be released; nothing was charged. Guests have no hold to release.
+      if(conflict.sessionId)await charge.release(conflict.sessionId);
+      clearPhotos();                              // also removes any saved copy on this device
+      party.end();                                // leave a reconnected room, if any
+      setConflict(null);setConfirmNew({open:false,busy:false,error:''});
+      setStep('mode');setInstructions(false);
+      setRecoveryMessage('Your previous session was closed. No points were used for it. You can start a new session now.');
+    }catch(e){setConfirmNew({open:true,busy:false,error:e instanceof Error?e.message:'Could not close that session. Please try again.'});}
+  }
+  // A new reservation was refused because one already exists: offer that one instead of a dead-end message.
+  async function offerExistingSession(error:unknown){
+    if(!(error instanceof Error)||!/active booth/i.test(error.message))return;
+    const server=await charge.findActive().catch(()=>null);
+    if(!server)return;   // 019 not deployed or lookup failed: keep the original message visible
+    let local:ActiveRecord|null=null;
+    try{const saved=user?await readActiveSession(user.id):null;if(saved?.sessionId===server.sessionId)local=saved;}catch{/* ignore */}
+    charge.clearError();setConflict({...server,local});
+  }
   const editingGate = useRef<ReturnType<typeof createEditingConfirmation> | null>(null);
   if (!editingGate.current) editingGate.current = createEditingConfirmation(() => billing.current(), setConfirmation);
   useEffect(() => () => editingGate.current?.dispose(), []);
@@ -107,11 +276,17 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const disconnectOpen = active && partnerLost && !disconnectAcknowledged && !pendingLeave;
   const duoActive = !!party.room || mode === 'duo' && ['session','upload','design','export'].includes(step);
   function requestEditing() { return editingApproved || !!charge.receipt ? Promise.resolve(true) : editingGate.current!.request().then(Boolean); }
-  function clearPhotos(removeSaved=true) {
+  // removeSaved: also delete the copies saved on this device (deliberate leave / new session).
+  // release: also release the server reservation. On page departure we keep it so the session can be resumed.
+  function clearPhotos(removeSaved=true, release=true) {
     setRestored(false);
-    if(removeSaved&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setSavedDraft(null);setRecoveryMessage('');}
+    if(removeSaved&&user){
+      activeSaved.current=false;
+      recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>Promise.all([deleteDraft(user.id),deleteActiveSession(user.id)])).then(()=>{}).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});
+      setSavedDraft(null);setRecoveryMessage('');
+    }
     editingGate.current?.cancel(); setConfirmation({open:false,busy:false,error:''}); setEditingApproved(false);
-    charge.reset();
+    if(release)charge.reset(); else charge.forget();
     setCard(current => ({ ...current, shots: [], offsets: [] }));
     setDuoUploads([]);
     setRetake(null); setRestoreCamera(false);
@@ -153,9 +328,13 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   }, [hasPhotos, duoActive, active]);
   useEffect(() => {
     // Clear on actual page departure too, including pages restored from browser cache.
-    const clearOnDeparture = () => { editingGate.current?.dispose(); clearPhotos(false); setPendingLeave(null); setStep('mode'); setInstructions(false); };
+    // A saved active session keeps its server reservation so it can be resumed after the refresh.
+    const clearOnDeparture = () => { editingGate.current?.dispose(); clearPhotos(false, !activeSaved.current); setPendingLeave(null); setStep('mode'); setInstructions(false); };
+    // Coming back via the browser's back/forward cache does not reload the page, so check for recovery again.
+    const returnFromCache = (event: PageTransitionEvent) => { if (event.persisted) setRecheck(count => count + 1); };
     window.addEventListener('pagehide', clearOnDeparture);
-    return () => window.removeEventListener('pagehide', clearOnDeparture);
+    window.addEventListener('pageshow', returnFromCache);
+    return () => { window.removeEventListener('pagehide', clearOnDeparture); window.removeEventListener('pageshow', returnFromCache); };
   }, []);
   useEffect(() => { if (active) { setUseInvite(true); setStep(invite ? 'join' : 'mode'); if (invite) setMode('duo'); setRetake(null); setRestoreCamera(false); setInstructions(!invite); } else { setInstructions(false); party.end(); } }, [active, invite]);
   // A missed heartbeat must not unmount the camera or silently send one user back.
@@ -187,7 +366,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     const created = await party.create({ layout: card.layout, template: null, source });
     if (created) {
       try { await charge.reserve(created.code); setStep('room'); }
-      catch { party.end(); }
+      catch (error) { party.end(); await offerExistingSession(error); }
     }
   }
   async function joinParty(code: string) {
@@ -198,6 +377,21 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     if (!active || !invite) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      // A guest who refreshes keeps the invite link in the address bar. Their seat is still held,
+      // so joining again would be refused ("already has two people"): reconnect with the saved seat instead.
+      const saved = user ? await readActiveSession(user.id).catch(() => null) as ActiveRecord | null : null;
+      if (cancelled) return;
+      if (saved?.room?.role === 'guest' && saved.room.invite === invite) {
+        activeSaved.current = true;
+        try { await resumeRecord(saved); return; }
+        catch (error) {
+          if (cancelled) return;
+          if (!roomGone(error)) { resumeFailed(saved, error); return; }
+          // The room is gone: forget the seat and let the normal join show its "expired" message.
+          activeSaved.current = false;
+          if (user) recoveryWrites.current = recoveryWrites.current.catch(() => {}).then(() => deleteActiveSession(user.id)).catch(() => {});
+        }
+      }
       const joined = await party.join('', invite);
       if (joined && !cancelled) { change({ layout: joined.settings.layout, template: null, shots: [] }); setSource(joined.settings.source); setMode('duo'); setStep('room'); }
     }, 0);
@@ -213,41 +407,59 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     if (charge.busy || party.busy) return;
     setRestoreCamera(false);
     if (mode === 'duo' && source === 'camera') { await createParty(); return; }
-    try { await charge.reserve(); setStep(source === 'upload' ? 'upload' : 'session'); } catch { /* Keep the layout and show the error. */ }
+    try { await charge.reserve(); setStep(source === 'upload' ? 'upload' : 'session'); }
+    catch (error) { await offerExistingSession(error); /* Otherwise keep the layout and show the error. */ }
   }
+  // While the user decides about an unfinished session, only the resume panel is shown.
+  const showSteps = active && !conflict;
   const visibleProgress: [Step, string][] = mode === 'duo' && ['duo', 'join', 'room'].includes(step) ? [['duo', 'Create or join'], ['join', 'Invitation'], ['room', 'Your party']] : progress;
   return <>
     <section id="booth" className="booth flow-booth" data-current-step={step} hidden={!active} aria-label="Photobooth">
       <div className="flow-top"><a href="#" className="back-link">Leave the booth</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>How it works</button></div>
       <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
+        {active&&conflict&&<div ref={conflictPanel} tabIndex={-1} className="session-note recovery-panel resume-panel" role="region" aria-label="Unfinished session">
+          <p className="resume-title"><strong>You have an unfinished session</strong></p>
+          {conflict.local
+            ? <p>{describeRecord(conflict.local)}{conflict.local.savedAt?` · last saved ${shortTime(conflict.local.savedAt)}`:''}</p>
+            : <p>{conflict.duo?'Duo booth':'Solo booth'}{conflict.createdAt?` started at ${shortTime(conflict.createdAt)}`:''}{conflict.expiresAt?` · held until ${shortTime(conflict.expiresAt)}`:''}. Its photos are not saved on this device.</p>}
+          {conflict.local&&conflict.local.card.shots.some(Boolean)&&<div className="resume-thumbs" aria-hidden="true">{conflict.local.card.shots.filter(Boolean).slice(0,4).map((shot,index)=><img key={index} src={shot} alt="" />)}</div>}
+          <p>{conflict.local?.room?.role==='guest'?'Your creator covers this session.':'No points have been used for this session yet.'}{conflict.roomEnded?' This duo booth has ended (it expired or your person closed it), so it cannot be resumed. Start a new session to create a new booth.':conflict.duo&&!conflict.local?' This duo booth was opened on another device, so it cannot be resumed here, but you can close it and start again.':''}</p>
+          {(conflict.local?!conflict.roomEnded:!conflict.duo)&&<button className="primary" disabled={resuming} onClick={()=>void resumeConflict()}>{resuming?'Resuming…':'Resume existing session'}</button>}
+          <button className="text-button" disabled={resuming} onClick={()=>setConfirmNew({open:true,busy:false,error:''})}>Start a new session</button>
+          {conflict.error&&<p role="alert" className="room-error">{conflict.error}{needsPoints(conflict.error)&&<> <a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a></>}</p>}
+        </div>}
         {active&&savedDraft&&<div className="session-note recovery-panel"><p>A previous photocard is saved on this device.</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:'Could not resume.');}}}>Resume saved editing</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError("Could not delete the saved copy. Please try again."));setSavedDraft(null);}}>Delete saved copy</button><WarningNotice>{sharedError}</WarningNotice></div>}
         {active&&['session','upload','design','export'].includes(step)&&<details className="session-note recovery-panel recovery-options"><summary>{saveRecovery ? "Auto-save on this device" : "Auto-save is off"}</summary><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setRecoveryMessage('Saved copy removed.');}}}/><span>Automatically save editing on this device</span></label><p>Enabled by default so refreshing restores your editing. Photos stay on this device for up to 24 hours. Leaving the booth deletes the saved copy.</p></details>}{active&&recoveryMessage&&<p className="session-note recovery-status" role="status">{recoveryMessage}</p>}
-        {active && !confirmation.open && charge.error && <WarningNotice title="Before you continue"><p>{charge.error}</p><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></WarningNotice>}
+        {/* The top-up link only appears for points problems; other errors (e.g. an active booth) get the resume panel instead. */}
+        {active && !confirmation.open && !conflict && charge.error && <WarningNotice title="Before you continue"><p>{charge.error}</p>{needsPoints(charge.error) && <><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></>}</WarningNotice>}
         {active && ['session','upload','design','export'].includes(step) && <div className="session-note" aria-live="polite">
           {party.room?.role === 'guest' ? 'Your creator covers this session. No points or free trial are used from your account.' : charge.busy ? 'Confirming your session…' : charge.receipt || 'Nothing is deducted until you confirm that you’re ready to edit. Your free trial is used first, otherwise 100 points.'}
         </div>}
-        {active && step === 'mode' && <ModeScreen onChoose={choice => { setMode(choice); clearPhotos(); change({template:null}); setStep('source'); }} />}
-        {active && step === 'duo' && <DuoChoice onCreate={() => { party.end(); setStep('layout'); }} onJoin={() => { party.end(); setUseInvite(false); setStep('join'); }} onBack={() => setStep('source')} />}
-        {active && step === 'join' && <JoinRoom invite={useInvite ? invite : null} busy={party.busy} error={party.error} onJoin={joinParty} onBack={() => { party.end(); setStep('duo'); }} />}
-        {active && step === 'room' && party.room && <WaitingRoom mirror={mirror} onMirrorChange={setMirror} room={party.room} busy={party.busy} error={party.error} onReady={value => { void party.ready(value); }} onContinue={enterParty} onLeave={() => requestLeave(() => { party.end(); setStep('duo'); })} />}
-        {active && step === 'layout' && <><LayoutScreen busy={party.busy || charge.busy} selected={card.layout} onSelect={layout => { if (layout !== card.layout) change({ layout, shots: [], template: null }); setRetake(null); }} onBack={() => setStep(mode === 'duo' && source === 'camera' ? 'duo' : 'source')} onNext={() => void startSession()} /><WarningNotice>{party.error}</WarningNotice></>}
-        {active && step === 'source' && <SourceScreen mode={mode} onBack={() => setStep('mode')} onChoose={choice => { change({ shots: [], template: null }); setSource(choice); setRetake(null); setStep(mode === 'duo' && choice === 'camera' ? 'duo' : 'layout'); }} />}
-        {active && (step === 'session' || ['design','export'].includes(step) && party.room && source === 'camera') && <div hidden={step !== 'session'}><SessionScreen room={party.room} visible={step === 'session'} duoControl={duoControl} onPartnerConnection={setPeerConnected} onPartnerExit={() => setExplicitDisconnect(true)} onSharedPhotos={shots => change({ shots })} onRemoteSession={index => { setRetake(index); setStep('session'); }} card={card} method={method} seconds={seconds} onMethod={setMethod} onSeconds={setSeconds} retake={retake} onRetake={setRetake} restoreCamera={restoreCamera} interrupted={instructions || !!pendingLeave || confirmation.open || disconnectOpen} flash={flash} flashColor={flashColor} onFlashChange={setFlash} onFlashColor={setFlashColor} mirror={mirror} onMirrorChange={setMirror}
+        {showSteps && step === 'mode' && <ModeScreen onChoose={choice => { setMode(choice); clearPhotos(); change({template:null}); setStep('source'); }} />}
+        {showSteps && step === 'duo' && <DuoChoice onCreate={() => { party.end(); setStep('layout'); }} onJoin={() => { party.end(); setUseInvite(false); setStep('join'); }} onBack={() => setStep('source')} />}
+        {showSteps && step === 'join' && <JoinRoom invite={useInvite ? invite : null} busy={party.busy} error={party.error} onJoin={joinParty} onBack={() => { party.end(); setStep('duo'); }} />}
+        {showSteps && step === 'room' && party.room && <WaitingRoom mirror={mirror} onMirrorChange={setMirror} room={party.room} busy={party.busy} error={party.error} onReady={value => { void party.ready(value); }} onContinue={enterParty} onLeave={() => requestLeave(() => { party.end(); setStep('duo'); })} />}
+        {showSteps && step === 'layout' && <><LayoutScreen busy={party.busy || charge.busy} selected={card.layout} onSelect={layout => { if (layout !== card.layout) change({ layout, shots: [], template: null }); setRetake(null); }} onBack={() => setStep(mode === 'duo' && source === 'camera' ? 'duo' : 'source')} onNext={() => void startSession()} /><WarningNotice>{party.error}</WarningNotice></>}
+        {showSteps && step === 'source' && <SourceScreen mode={mode} onBack={() => setStep('mode')} onChoose={choice => { change({ shots: [], template: null }); setSource(choice); setRetake(null); setStep(mode === 'duo' && choice === 'camera' ? 'duo' : 'layout'); }} />}
+        {showSteps && (step === 'session' || ['design','export'].includes(step) && party.room && source === 'camera') && <div hidden={step !== 'session'}><SessionScreen room={party.room} visible={step === 'session'} duoControl={duoControl} onPartnerConnection={setPeerConnected} onPartnerExit={() => setExplicitDisconnect(true)} onSharedPhotos={shots => change({ shots })} onRemoteSession={index => { setRetake(index); setStep('session'); }} card={card} method={method} seconds={seconds} onMethod={setMethod} onSeconds={setSeconds} retake={retake} onRetake={setRetake} restoreCamera={restoreCamera} interrupted={instructions || !!pendingLeave || confirmation.open || disconnectOpen} flash={flash} flashColor={flashColor} onFlashChange={setFlash} onFlashColor={setFlashColor} mirror={mirror} onMirrorChange={setMirror}
           beforeReview={requestEditing} onShot={(index, shot) => setCard(current => ({ ...current, shots: replaceShot(current.shots, index, shot), offsets: reconcileOffsets(current.shots, current.offsets, replaceShot(current.shots, index, shot)) }))} onMove={reorder} onBack={() => goBack('layout')} onNext={wasCamera => { setRestoreCamera(wasCamera); setRetake(null); setEditingApproved(true); setStep('design'); }} /></div>}
-        {active && step === 'upload' && mode === 'solo' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('layout')} onNext={() => void reviewUploads()} />}
-        {active && step === 'upload' && mode === 'duo' && <DuoUploadScreen card={card} photos={duoUploads} onPhotos={setDuoUploads} onBack={() => goBack('layout')} onNext={shots => void reviewUploads(shots)} />}
-        {active && editingApproved && (step === 'design' || step === 'export') && <><EditScreen stage={step} onContinue={() => setStep('export')} photosLocked={restored || party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => void retakeFromEdit(null)} onDesign={() => setStep('design')} /><WarningNotice>{sharedError}</WarningNotice></>}
+        {showSteps && step === 'upload' && mode === 'solo' && <UploadScreen card={card} replacement={retake} onPhotos={shots => { change({ shots }); setRetake(null); }} onMove={reorder} onBack={() => goBack('layout')} onNext={() => void reviewUploads()} />}
+        {showSteps && step === 'upload' && mode === 'duo' && <DuoUploadScreen card={card} photos={duoUploads} onPhotos={setDuoUploads} onBack={() => goBack('layout')} onNext={shots => void reviewUploads(shots)} />}
+        {showSteps && editingApproved && (step === 'design' || step === 'export') && <><EditScreen stage={step} onContinue={() => setStep('export')} photosLocked={restored || party.room?.role === 'guest' && source === 'camera'} source={source} card={card} onChange={change} onMove={reorder} onRetake={index => { void retakeFromEdit(index); }} onBack={() => void retakeFromEdit(null)} onDesign={() => setStep('design')} /><WarningNotice>{sharedError}</WarningNotice></>}
       </div>
     </section>
-    <Instructions open={active && !savedDraft && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
+    <BoothDialog open={active && confirmNew.open && !!conflict} title="Start a new session?" cancelLabel="Keep my session" confirmLabel="Start new session" busy={confirmNew.busy} error={confirmNew.error} onCancel={() => setConfirmNew({open:false,busy:false,error:''})} onConfirm={() => void startNewSession()}>
+      <p>Your unfinished session will be closed. No points have been used for it{conflict?.local?.photosSaved && conflict.local.card.shots.some(Boolean) ? ', and the photos saved for it on this device will be deleted' : ''}.</p>
+    </BoothDialog>
+    <Instructions open={active && !savedDraft && !conflict && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
     <div id="print-sheet" aria-hidden="true" />
     <LeaveDialog duo={duoActive} open={!!pendingLeave} count={duoUploads.some(Boolean) ? duoUploads.filter(Boolean).length : card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); void duoControl.current?.({type:'leave'}).catch(() => {}); clearPhotos(); proceed?.(); }} />
     <BoothDialog open={active && confirmation.open && !disconnectOpen && !pendingLeave} title="Proceed to Editing?" cancelLabel="Retake / Cancel" confirmLabel={charge.cost === 0 ? 'Confirm & Use Free Trial' : 'Confirm & Deduct Points'} busy={confirmation.busy} error={confirmation.error} onCancel={() => editingGate.current?.cancel()} onConfirm={() => void editingGate.current?.confirm()}>
       <p>Review your photos carefully. Once you continue to framing and export, {charge.cost === 0 ? 'your free trial will be used and 0 points will be deducted from your account.' : `${charge.cost ?? 100} points will be deducted from your account.`}</p>
     </BoothDialog>
     <BoothDialog open={disconnectOpen} title="Partner Disconnected" cancelLabel="Stay in Room" confirmLabel="Leave Booth" busy={confirmation.busy} onCancel={() => { setDisconnectAcknowledged(true); void party.check(); }} onConfirm={() => { editingGate.current?.cancel(); clearPhotos(); party.end(); setStep('mode'); }}>
-      <p>Your partner has left the session. Would you like to stay in the room or leave?</p>
+      <p>{explicitDisconnect ? 'Your partner has left the session.' : 'Your partner has lost their connection. If they refreshed or reopened the page, they will reconnect automatically in a few seconds.'} Would you like to stay in the room or leave?</p>
     </BoothDialog>
   </>;
 }

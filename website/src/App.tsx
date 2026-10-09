@@ -7,6 +7,7 @@ import { Home } from './pages/Home';
 const About = lazy(() => import('./pages/About').then(m=>({default:m.About})));
 const Booth = lazy(() => import('./booth/Booth').then(m=>({default:m.Booth})));
 import { rememberBoothReturn, consumeBoothReturn } from './auth/inviteReturn.js';
+import { hasRecoverableWork } from './booth/recoveryStore.js';
 
 export function App() {
   const { user, loading, recovery, emailLink, error: authError } = useAuth();
@@ -17,6 +18,17 @@ export function App() {
   const isBooth = hash === '#booth' || hash.startsWith('#booth?'), isAbout = hash === '#about', isAccount = ['#account', '#account/buy', '#account/admin'].includes(hash);
   const invite = isBooth ? new URLSearchParams(hash.split('?')[1] || '').get('invite') : null;
   useEffect(()=>{if(isBooth&&user)setBoothOpened(true);},[isBooth,user]);
+  // Returning to the home page with an unfinished booth on this device (refresh, closed tab,
+  // reopened browser) goes straight back to the booth, which then restores the session.
+  // Runs once per page load and never overrides a page the user asked for (about, account…).
+  const recoveryChecked = useRef(false);
+  useEffect(() => {
+    if (loading || !user || recovery || emailLink || recoveryChecked.current) return;
+    recoveryChecked.current = true;
+    const onHome = () => !window.location.hash || window.location.hash === '#';
+    if (!onHome()) return;
+    void hasRecoverableWork(user.id).then(found => { if (found && onHome()) window.location.hash = 'booth'; }).catch(() => {});
+  }, [loading, user, recovery, emailLink]);
   useEffect(() => { if(!loading && !user && isBooth) rememberBoothReturn(hash); }, [loading,user,isBooth,hash]);
   useEffect(() => { if(!loading && user && !recovery && !emailLink && !authError && isAccount && hash !== '#account/admin') { const target=consumeBoothReturn(); if(target) window.location.hash=target; } }, [loading,user,recovery,emailLink,authError,isAccount,hash]);
   useEffect(() => {

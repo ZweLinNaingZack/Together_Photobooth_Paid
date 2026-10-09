@@ -153,7 +153,20 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     assert.equal((await wallet()).reserved_points,100);
     assert.equal((await wallet()).points,100,'Reservation does not deduct until completion');
     await assert.rejects(() => action('88888888-8888-4888-8888-888888888888','reserve'),/active booth/);
+    // 019: the blocked user can find their own unfinished booth, reattach to it, and nobody else can see it.
+    await db.exec('reset role');
+    await db.exec(await readFile(new URL('../019-active-session-lookup.sql',import.meta.url),'utf8'));
+    const activeSession = async () => (await db.query('select together_active_session() as s')).rows[0].s;
+    await as(alice);
+    assert.equal((await activeSession()).session_id,nextId);
+    assert.equal((await activeSession()).duo,false);
+    assert.equal((await action(nextId,'reserve')).session_id,nextId,'resuming with the same id reuses the hold');
+    assert.equal((await wallet()).reserved_points,100,'resuming does not create a second hold');
+    await as(bob); assert.equal(await activeSession(),null,'another user cannot see the booth');
+    await as(alice,'anon'); await assert.rejects(() => activeSession(),/permission denied/);
+    await as(alice);
     await complete(nextId); await complete(nextId);
+    assert.equal(await activeSession(),null,'a paid session is no longer offered as unfinished');
     assert.equal((await wallet()).points,0);
     assert.equal((await wallet()).reserved_points,0);
     await db.exec('reset role');

@@ -12,13 +12,18 @@ import {reconcileOffsets} from '../src/booth/photoPosition.js';
 const compiled=ts.transpileModule(await readFile(new URL('../src/booth/Booth.tsx',import.meta.url),'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022},
 }).outputText;
-function harness({cost=100,role='host',invite=null,user=null,draft=null,storageFailure=false}={}) {
+function harness({cost=100,role='host',invite=null,user=null,draft=null,storageFailure=false,active=null,server=null,roomGone=false,partnerOnline=true}={}) {
+  const store={active,activeSaves:[]}, adopted=[], released=[], adoptedRooms=[], resumed=[], joins=[];
+  class RoomRequestError extends Error{constructor(message,status=0){super(message);this.status=status;}}
   const cells=[], hooks=[]; let cursor=0, dirty=false, effects=[], tree, debits=0, commit;
-  const charge={cost,busy:false,error:'',receipt:'',reserve:async()=>{},reset:()=>{},complete:()=>{debits++;return new Promise(resolve=>{commit=()=>{charge.receipt='Confirmed';resolve();};});}};
+  const charge={cost,busy:false,error:'',receipt:'',sessionId:'fresh-session',reserve:async()=>{},reset:()=>{},forget:()=>{},
+    adopt:async(id,room=null)=>{adopted.push(id);adoptedRooms.push(room);charge.sessionId=id;},findActive:async()=>server,release:async id=>{released.push(id);},clearError:()=>{charge.error='';},complete:()=>{debits++;return new Promise(resolve=>{commit=()=>{charge.receipt='Confirmed';resolve();};});}};
   const party={room:null,busy:false,error:'',ended:false,
     end(){this.room=null;},
     async create(settings){this.room={code:'ABCDEF',token:'host-token',role,settings,host:{online:true,ready:true},guest:{online:false,ready:false},bothReady:false};return this.room;},
-    async join(){return this.create({layout:'A',template:null,source:'camera'});},
+    async join(...args){joins.push(args);return this.create({layout:'A',template:null,source:'camera'});},
+    async resume(saved){resumed.push(saved);if(roomGone)throw new RoomRequestError('This booth has ended or expired.',404);
+      this.room={code:saved.code,token:saved.token,role:saved.role,settings:{layout:'A',template:null,source:'camera'},host:{online:true,ready:true},guest:{online:partnerOnline,ready:true},bothReady:partnerOnline};return this.room;},
     async check(){return this.room;}, async ready(){},
   };
   const react={
@@ -30,13 +35,15 @@ function harness({cost=100,role='host',invite=null,user=null,draft=null,storageF
   const require=name=>{
     if(name==='react')return react;
     if(name==='../auth/AuthProvider')return {useAuth:()=>({user})};
-    if(name==='./recoveryStore.js')return {readDraft:async()=>draft,deleteDraft:async()=>{},saveDraft:async()=>{if(storageFailure)throw Error('Storage full');}};
+    if(name==='./recoveryStore.js')return {readDraft:async()=>draft,deleteDraft:async()=>{},saveDraft:async()=>{if(storageFailure)throw Error('Storage full');},
+      readActiveSession:async()=>store.active,deleteActiveSession:async()=>{store.active=null;},saveActiveSession:async(_,record)=>{if(storageFailure)throw Error('Storage full');store.active=record;store.activeSaves.push(record);}};
     if(name==='react/jsx-runtime')return{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'Fragment'};
     if(name==='./core')return core;
     if(name==='./photoPosition.js')return{reconcileOffsets};
     if(name==='./frameAssets')return{prefetchFrames:()=>()=>{}};
     if(name==='../components/useStepHistory')return{useStepHistory:()=>{}};
     if(name==='./useRoom')return{useRoom:()=>party};
+    if(name==='./rooms')return{RoomRequestError};
     if(name==='./useSessionCharge')return{useSessionCharge:()=>charge};
     if(name==='./editingConfirmation.mjs')return{createEditingConfirmation};
     return new Proxy({}, {get:(_,key)=>String(key)});
@@ -45,7 +52,7 @@ function harness({cost=100,role='host',invite=null,user=null,draft=null,storageF
   const leaveGuard={current:()=>{}};
   function render(){let count=0;do{dirty=false;cursor=0;effects=[];tree=exports.Booth({active:true,invite,leaveGuard});for(const effect of effects)effect();if(++count>20)throw new Error('Unstable render');}while(dirty);return tree;}
   function find(type,predicate=()=>true){render();let result;function walk(node){if(!node||result)return;if(Array.isArray(node)){node.forEach(walk);return;}if(node.type===type&&predicate(node.props)){result=node.props;return;}walk(node.props?.children);}walk(tree);return result;}
-  async function flush(){for(let i=0;i<12;i++)await Promise.resolve();render();}
+  async function flush(){for(let round=0;round<3;round++){for(let i=0;i<12;i++)await Promise.resolve();await new Promise(resolve=>setTimeout(resolve,0));render();}}
   async function start(mode='solo',source='upload'){
     find('Instructions').onContinue(); find('ModeScreen').onChoose(mode);
     assert.ok(find('SourceScreen')); find('SourceScreen').onChoose(source);
@@ -57,7 +64,7 @@ function harness({cost=100,role='host',invite=null,user=null,draft=null,storageF
       find('WaitingRoom').onContinue();await flush();
     }
   }
-  return {find,render,flush,start,party,charge,leaveGuard,debits:()=>debits,commit:()=>commit?.()};
+  return {find,render,flush,start,party,charge,leaveGuard,store,adopted,released,adoptedRooms,resumed,joins,debits:()=>debits,commit:()=>commit?.()};
 }
 
 test('insufficient points show a popup and never open capture or debit',async()=>{
@@ -200,4 +207,141 @@ test('header navigation uses the Duo exit guard and cancellation retains the ses
   ui.find('LeaveDialog').onCancel();assert.ok(ui.find('SessionScreen'));assert.equal(navigated,false);
   ui.leaveGuard.current(()=>{navigated=true;});ui.find('LeaveDialog').onConfirm();
   assert.equal(navigated,true);assert.equal(ui.party.room,null);
+});
+
+// ---------------------------------------------------------------------------
+// Unfinished "Your photos" session recovery (before editing is confirmed)
+// ---------------------------------------------------------------------------
+const savedSolo=(overrides={})=>({sessionId:'held-session',mode:'solo',source:'upload',step:'upload',photosSaved:true,
+  card:{layout:'A',shots:['one','two'],template:null,filter:'original',color:'cherry',caption:'better together.',design:'classic'},...overrides});
+
+test('a Solo session is saved on this device during Your photos, including partial photos',async()=>{
+ const ui=harness({user:{id:'alice'}});await ui.start('solo','upload');
+ ui.find('UploadScreen').onPhotos(['one','two']);await ui.flush();
+ assert.equal(ui.store.active.sessionId,'fresh-session');assert.equal(ui.store.active.step,'upload');
+ assert.equal(JSON.stringify(ui.store.active.card.shots),'["one","two"]');assert.equal(ui.debits(),0);
+});
+test('with auto-save off only the session id and step are kept, never the photos',async()=>{
+ const ui=harness({user:{id:'alice'}});await ui.start('solo','upload');
+ ui.find('input',p=>p.type==='checkbox').onChange({target:{checked:false}});
+ ui.find('UploadScreen').onPhotos(['one']);await ui.flush();
+ assert.equal(ui.store.active.sessionId,'fresh-session');assert.equal(ui.store.active.card.shots.length,0);assert.equal(ui.store.active.photosSaved,false);
+});
+test('refresh returns to the same Your photos session with its photos and no charge',async()=>{
+ const ui=harness({user:{id:'alice'},active:savedSolo()});ui.render();await ui.flush();
+ assert.deepEqual(ui.adopted,['held-session'],'reattaches to the saved reservation instead of creating a new one');
+ assert.equal(JSON.stringify(ui.find('UploadScreen').card.shots),'["one","two"]');
+ assert.equal(ui.find('ModeScreen'),undefined);assert.equal(ui.find('Instructions').open,false);assert.equal(ui.debits(),0);
+});
+test('a camera session comes back to the camera step',async()=>{
+ const ui=harness({user:{id:'alice'},active:savedSolo({source:'camera',step:'session'})});ui.render();await ui.flush();
+ assert.ok(ui.find('SessionScreen'));assert.equal(ui.find('SessionScreen').card.shots.length,2);
+});
+test('when automatic resume fails the user can resume later or deliberately start new',async()=>{
+ const ui=harness({user:{id:'alice'},active:savedSolo()});
+ ui.charge.adopt=async()=>{throw Error('You need 100 points to start this session. Please top up your account.');};
+ ui.render();await ui.flush();
+ assert.ok(ui.find('button',p=>p.children==='Resume existing session'));
+ assert.equal(ui.find('ModeScreen'),undefined,'step screens are hidden so saved photos cannot be wiped by accident');
+ ui.find('button',p=>p.children==='Start a new session').onClick();
+ const dialog=ui.find('BoothDialog',p=>p.title==='Start a new session?');assert.equal(dialog.open,true);
+ await dialog.onConfirm();await ui.flush();
+ assert.deepEqual(ui.released,['held-session']);assert.equal(ui.store.active,null);
+ assert.ok(ui.find('ModeScreen'));assert.equal(ui.debits(),0);
+});
+test('a session known only to the server can be resumed from the booth entry',async()=>{
+ const ui=harness({user:{id:'alice'},server:{sessionId:'server-session',duo:false,usedTrial:false}});ui.render();await ui.flush();
+ await ui.find('button',p=>p.children==='Resume existing session').onClick();await ui.flush();
+ assert.deepEqual(ui.adopted,['server-session']);assert.ok(ui.find('SourceScreen'));assert.equal(ui.debits(),0);
+});
+test('an "active booth" refusal opens the resume panel instead of a top-up dead end',async()=>{
+ const ui=harness({user:{id:'alice'},server:{sessionId:'server-session',duo:false,usedTrial:false}});
+ ui.find('Instructions').onContinue();await ui.flush();
+ ui.find('button',p=>p.children==='Start a new session').onClick();await ui.find('BoothDialog',p=>p.title==='Start a new session?').onConfirm();await ui.flush();
+ ui.released.length=0;
+ ui.charge.reserve=async()=>{ui.charge.error='You already have an active booth. Leave that booth first, or wait for its reservation to expire.';throw new Error(ui.charge.error);};
+ await ui.start('solo','upload');await ui.flush();
+ assert.ok(ui.find('button',p=>p.children==='Resume existing session'));
+ assert.equal(ui.find('WarningNotice',p=>p.title==='Before you continue'),undefined);
+});
+test('a duo reservation is not resumed as Solo but can be closed',async()=>{
+ const ui=harness({user:{id:'alice'},server:{sessionId:'duo-session',duo:true,usedTrial:false}});ui.render();await ui.flush();
+ assert.equal(ui.find('button',p=>p.children==='Resume existing session'),undefined);
+ assert.ok(ui.find('button',p=>p.children==='Start a new session'));
+});
+test('confirming editing replaces the pre-edit record with the editing draft',async()=>{
+ const ui=harness({user:{id:'alice'}});await ui.start('solo','upload');
+ ui.find('UploadScreen').onPhotos(['one','two','three']);await ui.flush();assert.ok(ui.store.active);
+ ui.find('UploadScreen').onNext();await ui.flush();
+ ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').onConfirm();await ui.flush();ui.commit();await ui.flush();
+ assert.ok(ui.find('EditScreen'));assert.equal(ui.store.active,null);assert.equal(ui.debits(),1);
+});
+test('points errors still show the top-up link',async()=>{
+ const ui=harness();
+ ui.charge.reserve=async()=>{ui.charge.error='You need 100 points to continue.';throw new Error(ui.charge.error);};
+ await ui.start('solo','upload');
+ const warning=ui.find('WarningNotice',p=>p.title==='Before you continue');assert.ok(warning);
+ assert.match(JSON.stringify(warning.children),/top up/);
+});
+test('an unconfirmed full-photo backup does not hide the active Your photos session',async()=>{
+ const backup={editingApproved:false,sessionId:'held-session',card:{layout:'A',shots:['one','two','three'],filter:'original',caption:'x',design:'classic'},source:'upload',mode:'solo'};
+ const ui=harness({user:{id:'alice'},draft:backup,active:savedSolo({card:{...savedSolo().card,shots:['one','two','three']}})});ui.render();await ui.flush();
+ assert.equal(ui.find('button',p=>p.children==='Resume saved editing'),undefined);
+ assert.equal(ui.find('UploadScreen').card.shots.length,3);assert.deepEqual(ui.adopted,['held-session']);
+});
+
+// ---------------------------------------------------------------------------
+// Duo session recovery
+// ---------------------------------------------------------------------------
+const hostSeat={code:'ABCDEF',token:'a'.repeat(48),role:'host',invite:'b'.repeat(48)};
+const guestSeat={code:'ABCDEF',token:'c'.repeat(48),role:'guest',invite:'d'.repeat(48)};
+const savedDuo=(room,overrides={})=>({sessionId:room.role==='guest'?'':'held-session',mode:'duo',source:'camera',step:'session',photosSaved:true,room,
+  card:{layout:'A',shots:['one'],template:null,filter:'original',color:'cherry',caption:'better together.',design:'classic'},...overrides});
+
+test('a Duo host saves the room seat and reservation while waiting and capturing',async()=>{
+ const ui=harness({user:{id:'host'}});await ui.start('duo','camera');
+ assert.ok(ui.find('SessionScreen'));
+ assert.equal(ui.store.active.mode,'duo');assert.equal(ui.store.active.room.code,'ABCDEF');assert.equal(ui.store.active.room.role,'host');
+ assert.equal(ui.store.active.sessionId,'fresh-session');assert.equal(ui.store.active.step,'session');
+});
+test('a refreshed Duo host reconnects to the same room and reservation without a new charge',async()=>{
+ const ui=harness({user:{id:'host'},active:savedDuo(hostSeat)});ui.render();await ui.flush();
+ assert.equal(ui.resumed[0].token,hostSeat.token,'reconnects with the saved seat, not a new join');
+ assert.deepEqual(ui.adopted,['held-session']);assert.deepEqual(ui.adoptedRooms,['ABCDEF']);
+ assert.ok(ui.find('SessionScreen'));assert.equal(ui.joins.length,0);assert.equal(ui.debits(),0);
+});
+test('if the partner is not back yet the host waits in the room',async()=>{
+ const ui=harness({user:{id:'host'},active:savedDuo(hostSeat),partnerOnline:false});ui.render();await ui.flush();
+ assert.ok(ui.find('WaitingRoom'));assert.equal(ui.find('SessionScreen'),undefined);
+});
+test('an ended Duo room cannot be resumed; the host can close the reservation and start again',async()=>{
+ const ui=harness({user:{id:'host'},active:savedDuo(hostSeat),roomGone:true});ui.render();await ui.flush();
+ assert.equal(ui.find('button',p=>p.children==='Resume existing session'),undefined);
+ ui.find('button',p=>p.children==='Start a new session').onClick();
+ await ui.find('BoothDialog',p=>p.title==='Start a new session?').onConfirm();await ui.flush();
+ assert.deepEqual(ui.released,['held-session']);assert.equal(ui.store.active,null);assert.ok(ui.find('ModeScreen'));
+});
+test('a refreshed Duo guest reconnects and is never billed',async()=>{
+ const ui=harness({user:{id:'guest'},role:'guest',active:savedDuo(guestSeat)});ui.charge.adopt=async()=>{throw Error('Guest must not be billed');};
+ ui.render();await ui.flush();
+ assert.equal(ui.resumed[0].role,'guest');assert.ok(ui.find('SessionScreen'));assert.equal(ui.debits(),0);
+});
+test('a guest refreshing on the invite link reconnects to their seat instead of joining again',async()=>{
+ const ui=harness({user:{id:'guest'},role:'guest',invite:guestSeat.invite,active:savedDuo(guestSeat,{step:'room'})});
+ ui.render();await new Promise(resolve=>setTimeout(resolve,10));await ui.flush();
+ assert.equal(ui.joins.length,0,'a second join would be refused as a third person');
+ assert.equal(ui.resumed.length,1);assert.ok(ui.find('WaitingRoom'));
+});
+test('a guest whose room ended is told plainly and their saved seat is removed',async()=>{
+ const ui=harness({user:{id:'guest'},role:'guest',active:savedDuo(guestSeat),roomGone:true});ui.render();await ui.flush();
+ assert.equal(ui.store.active,null);assert.ok(ui.find('ModeScreen'));
+ assert.equal(ui.find('button',p=>p.children==='Resume existing session'),undefined);
+});
+test('Duo upload photos for both sides are saved and restored',async()=>{
+ const ui=harness({user:{id:'alice'}});await ui.start('duo','upload');
+ ui.find('DuoUploadScreen').onPhotos(['a1','a2','','b1']);await ui.flush();
+ assert.equal(ui.store.active.mode,'duo');assert.equal(JSON.stringify(ui.store.active.duoUploads),'["a1","a2","","b1"]');
+ const saved=ui.store.active;
+ const again=harness({user:{id:'alice'},active:saved});again.render();await again.flush();
+ assert.equal(JSON.stringify(again.find('DuoUploadScreen').photos),'["a1","a2","","b1"]');assert.equal(again.debits(),0);
 });
