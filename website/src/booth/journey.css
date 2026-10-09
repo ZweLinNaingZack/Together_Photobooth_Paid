@@ -122,3 +122,11 @@
 .active-booth-dialog .room-error{margin:16px 0 0}
 @media(max-width:600px){.active-booth-facts{padding:4px 14px}}
 @media(max-width:340px){.active-booth-facts>div{flex-direction:column;gap:2px}.active-booth-facts dd{text-align:left}}
+/* Front / back camera choice: two large tap targets; the selected one is dark like the Mirror toggle. */
+.camera-facing{border:0;padding:0;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.camera-facing legend{grid-column:1/-1;padding:0;margin-bottom:8px;color:var(--muted);font-size:14px}
+.camera-facing label{position:relative;display:flex;align-items:center;justify-content:center;min-height:48px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);font-size:16px;cursor:pointer}
+.camera-facing input{position:absolute;opacity:0;width:1px;height:1px}
+.camera-facing label:has(input:checked){background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.camera-facing label:has(input:focus-visible){outline:3px solid #576f92;outline-offset:3px}
+.camera-facing:disabled label{opacity:.5;cursor:default}

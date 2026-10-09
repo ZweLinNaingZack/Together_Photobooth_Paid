@@ -3,8 +3,10 @@ export const previewProfiles=[
  {name:'Balanced',width:960,bitrate:1400000,fps:24},
  {name:'Clear',width:1280,bitrate:2400000,fps:24},
 ];
-export function createPreviewQuality(){
- let level=1,bad=0,good=0,lastChange=0;
+// Start on Low and step up only after sustained headroom: on mobile data or a relay the
+// preview stays light, leaving bandwidth for connecting and for photo transfers.
+export function createPreviewQuality({start=0}={}){
+ let level=start,bad=0,good=0,lastChange=0;
  return {get profile(){return previewProfiles[level];},sample({bandwidth,rtt,loss,cpu},now){
   // A bandwidth estimate near our own cap is not evidence of congestion.
   const poor=cpu||loss>.05||rtt>.6||(Number.isFinite(bandwidth)&&bandwidth<previewProfiles[level].bitrate*.8);

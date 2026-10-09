@@ -11,8 +11,9 @@ test('route diagnostics support selected pairs without nominated and distinguish
  const result=selectedVideoRoute(stats);assert.match(result.route,/relay → prflx \(udp\); local TURN transport: tls/);
  assert.equal(result.roundTrip,'169 ms');assert.ok(!JSON.stringify(result).includes('private-'));
 });
+test('a new preview starts on Low bandwidth',()=>{assert.equal(createPreviewQuality().profile.name,'Low bandwidth');});
 test('bandwidth near the configured cap does not unnecessarily reduce resolution',()=>{
- const q=createPreviewQuality();
+ const q=createPreviewQuality({start:1});
  for(let i=0;i<10;i++)q.sample({bandwidth:1400000,rtt:.16,loss:0},10000+i*2000);
  assert.equal(q.profile.name,'Balanced');
 });
@@ -28,7 +29,7 @@ test('missing fractionLost uses packet deltas and the selected transport route',
  const sample=videoSample(stats,old);assert.equal(sample.loss,.01);assert.equal(sample.rtt,.1);assert.equal(sample.bandwidth,5000000);
 });
 test('preview backs off under sustained pressure and improves only with sustained measured headroom',()=>{
- const q=createPreviewQuality();assert.equal(q.profile.name,'Balanced');
+ const q=createPreviewQuality({start:1});assert.equal(q.profile.name,'Balanced');
  assert.equal(q.sample({cpu:true},10000),false);assert.equal(q.sample({cpu:true},12000),true);assert.equal(q.profile.name,'Low bandwidth');
  for(let i=0;i<10;i++)q.sample({},14000+i*2000);assert.equal(q.profile.name,'Low bandwidth');
  for(let i=0;i<5;i++)q.sample({bandwidth:5000000,rtt:.05,loss:0},40000+i*2000);assert.equal(q.profile.name,'Balanced');

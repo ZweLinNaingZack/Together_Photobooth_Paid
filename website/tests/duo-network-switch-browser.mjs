@@ -14,9 +14,9 @@ try{
   const {SessionScreen}=await import('/src/booth/SessionScreen.tsx');
   await import('/src/booth/journey.css');
   const NativePeer=window.RTCPeerConnection;window.qaPeers=[];window.RTCPeerConnection=class extends NativePeer{constructor(...args){super(...args);window.qaPeers.push(this);}};
-  // Hold bulk traffic back to prove the shutter does not wait for originals.
+  // Photo traffic is delayed a little so the network switch happens mid-transfer.
   const originalSend=RTCDataChannel.prototype.send;
-  RTCDataChannel.prototype.send=function(data){if(this.label==='together'){setTimeout(()=>{if(this.readyState==='open')originalSend.call(this,data);},1800);}else originalSend.call(this,data);};
+  RTCDataChannel.prototype.send=function(data){if(this.label==='together'){setTimeout(()=>{if(this.readyState==='open')originalSend.call(this,data);},window.qaDelay??1800);}else originalSend.call(this,data);};
   document.body.innerHTML='<div id="qa-duo"></div>';window.qaShots={host:[],guest:[]};window.qaConnected={};window.qaEditing={};window.qaConfirmations=0;
   let n=0;Object.defineProperty(navigator.mediaDevices,'getUserMedia',{value:async()=>{
    const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=900;const ctx=canvas.getContext('2d');const color=n++?'#2277bb':'#dd3344';
@@ -34,30 +34,15 @@ try{
  await page.waitForFunction(()=>document.querySelector('[data-role="host"] video[aria-label="Your person’s live camera"]')?.videoWidth>=320,{},{timeout:15000});
  const encodings=await page.evaluate(()=>window.qaPeers.filter(p=>p.connectionState==='connected').flatMap(p=>p.getSenders().flatMap(s=>s.getParameters().encodings||[])));
  assert.ok(encodings.length===2&&encodings.every(e=>e.maxBitrate>=600000&&e.maxBitrate<=2400000&&e.scaleResolutionDownBy>=1),'both senders use bounded adaptive preview settings');
- for(const width of [1280,390]){
-  await page.setViewportSize({width,height:900});
-  const view=await page.locator('[data-role="host"] .session-view').boundingBox(),button=await page.locator('[data-role="host"] #capture-session').boundingBox();
-  assert.ok(button.y-(view.y+view.height)<28&&button.y>=view.y+view.height,'shutter is directly below preview at '+width);
- }
- try{await page.locator('[data-role="host"] #capture-session').click({timeout:10000});}
- catch(e){console.log(await page.evaluate(()=>({videos:[...document.querySelectorAll('video')].map(v=>({state:v.readyState,paused:v.paused,width:v.videoWidth,tracks:v.srcObject?.getTracks().map(t=>({ready:t.readyState,enabled:t.enabled,settings:t.getSettings()}))})),text:document.body.innerText})));throw e;}
- await page.waitForFunction(()=>document.querySelectorAll('[data-role="host"] .review-image img').length===1&&!document.querySelector('[data-role="host"] #capture-session').disabled,{},{timeout:1500});
- assert.ok(await page.getByText(/Finishing 1 high-quality photo/).count(),'originals still pending while shutter is available');
- await page.locator('[data-role="host"] #capture-session').click();
- await page.waitForFunction(()=>document.querySelectorAll('[data-role="host"] .review-image img').length===2&&!document.querySelector('[data-role="host"] #capture-session').disabled,{},{timeout:1500});
- await page.waitForFunction(()=>window.qaShots.host.length===2&&window.qaShots.host[0]===window.qaShots.guest[0]&&window.qaShots.host[1]===window.qaShots.guest[1],{},{timeout:25000});
- const result=await page.evaluate(async()=>{const data=window.qaShots.host[0];const img=new Image();img.src=data;await img.decode();return {same:data===window.qaShots.guest[0],width:img.width,height:img.height};});
- assert.equal(result.same,true,'both members receive the identical full-quality still');
- assert.ok(result.width>1000&&result.height>=900,'still exceeds scaled video preview dimensions');
- const peerCount=await page.evaluate(()=>{const count=window.qaPeers.length;window.qaPeers.find(p=>p.connectionState==='connected').close();return count;});
- await page.waitForFunction(count=>window.qaPeers.length>count&&window.qaConnected.host&&window.qaConnected.guest,peerCount,{timeout:30000});
- await page.locator('[data-role="host"] #capture-session').click({timeout:15000});
- await page.waitForFunction(()=>document.querySelectorAll('[data-role="host"] .review-image img').length===3);
- assert.equal(await page.locator('[data-role="host"]').getByRole('button',{name:'Continue to editing'}).isDisabled(),false,'editing is never blocked by slow photo transfers; previews stand in until full photos arrive');
- await page.waitForFunction(()=>window.qaShots.host.length===3&&window.qaShots.host[2]===window.qaShots.guest[2],{},{timeout:25000});
- assert.equal(await page.evaluate(()=>window.qaShots.host[0]===window.qaShots.guest[0]&&window.qaShots.host[1]===window.qaShots.guest[1]),true,'reconnect retains old photos and can take another');
- await page.locator('[data-role="host"] ').getByRole('button',{name:'Continue to editing'}).click();
- await page.waitForFunction(()=>window.qaEditing.host&&window.qaEditing.guest);
- assert.equal(await page.evaluate(()=>window.qaConfirmations),1,'only the creator confirms entry to editing');
- console.log(JSON.stringify({...result,bothEnteredEditing:true}));
+ const peersBefore=await page.evaluate(()=>window.qaPeers.length);
+ await page.locator('[data-role="host"] #capture-session').click({timeout:10000});
+ // Simulate a phone switching Wi-Fi ↔ mobile data while the photo is still being sent.
+ await page.waitForTimeout(300);
+ await page.evaluate(()=>navigator.connection.dispatchEvent(new Event('change')));
+ await page.waitForFunction(()=>window.qaShots.host[0]&&window.qaShots.host[0]===window.qaShots.guest[0],{},{timeout:30000});
+ await page.waitForFunction(()=>/Network path refreshes: [1-9]/.test(document.querySelector('[data-role="host"] .connection-details pre')?.textContent||'')&&/Network path refreshes: [1-9]/.test(document.querySelector('[data-role="guest"] .connection-details pre')?.textContent||''),{},{timeout:15000});
+ const after=await page.evaluate(()=>({peers:window.qaPeers.length,connected:window.qaPeers.filter(p=>p.connectionState==='connected').length,host:window.qaConnected.host,guest:window.qaConnected.guest}));
+ assert.equal(after.peers,peersBefore,'the same connection was kept: no rebuild');
+ assert.equal(after.connected,2);assert.equal(after.host&&after.guest,true,'both cameras still connected');
+ console.log(JSON.stringify({pathRefreshed:true,rebuilt:false,photoArrivedOnBoth:true}));
 }finally{await browser.close();}

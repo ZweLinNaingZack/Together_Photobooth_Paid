@@ -7,10 +7,10 @@ import { supabase } from '../auth/client';
 import {recordDiagnostic} from './diagnostics.js';
 import {validatePeerPhotos} from './peerPhoto.js';
 import {createPreviewQuality,recoveryDelay,videoSample,selectedVideoRoute} from './liveQuality.js';
-import {transferProgress} from './transferProgress.js';
+import {transferProgress,ackWatch} from './transferProgress.js';
 
 export type DuoEvent = { type: string; [key: string]: unknown };
-type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+type Signal = { type: string; session: string; id?: string; generation?: number; to?: string; restart?: boolean; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 type RtcConfig = { iceServers: RTCIceServer[]; relayConfigured: boolean; signalTopic?: string };
 
 // Signaling uses the room API; camera tracks and photos use encrypted WebRTC.
@@ -55,32 +55,58 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     let connectedAfter: number | null = null;
     let quality=createPreviewQuality(),previousStats=new Map(),statsBusy=false,parametersBusy=false;
     let qualityStatus='Waiting for negotiation',healthySince=0;
+    // While a photo is sending, the live video steps aside so the photo gets the bandwidth.
+    let transferring=0,reapply=false;
     async function applyQuality(active: RTCPeerConnection){
-      if(parametersBusy||stopped||pc!==active||active.signalingState!=='stable')return;
+      if(stopped||pc!==active||active.signalingState!=='stable')return;
+      if(parametersBusy){reapply=true;return;}   // run again once the current update finishes
       parametersBusy=true;
       try{
         for(const sender of active.getSenders())if(sender.track?.kind==='video'){
           const params=sender.getParameters();if(!params.encodings?.length)continue;
           const p=quality.profile;
           params.degradationPreference='maintain-framerate';
-          params.encodings=params.encodings.map(e=>({...e,maxBitrate:p.bitrate,maxFramerate:p.fps,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/p.width)}));
+          const bitrate=transferring?Math.min(p.bitrate,250000):p.bitrate,fps=transferring?Math.min(p.fps,15):p.fps;
+          params.encodings=params.encodings.map(e=>({...e,maxBitrate:bitrate,maxFramerate:fps,scaleResolutionDownBy:Math.max(1,(sender.track!.getSettings().width||1280)/p.width)}));
           await sender.setParameters(params);
           if(pc===active)qualityStatus=p.name;
         }
       }catch{if(pc===active)qualityStatus='Browser-managed (preview controls unavailable)';}
-      finally{parametersBusy=false;}
+      finally{parametersBusy=false;if(reapply){reapply=false;void applyQuality(active);}}
     }
-    const recover = () => {
+    // Last resort: rebuild the whole connection. There is no retry limit while the booth is open;
+    // after a few attempts the status line says so, without a popup that would pause the capture.
+    const recover = (delay = recoveryDelay(automaticRetries.current)) => {
       if (stopped || recoveryTimer) return;
-      if(automaticRetries.current>=4){setError('Automatic reconnection paused. Check Connection details, then select Reconnect cameras.');return;}
       recoveryTimer = setTimeout(() => {
         recoveryTimer = undefined;
         if (stopped || pc?.connectionState === 'connected' && channelsOpen()) return;
         automaticRetries.current++;
         recordDiagnostic('camera_retry');
         setAttempt(value => value + 1);
-      }, recoveryDelay(automaticRetries.current));
+      }, delay);
     };
+    // Gentle recovery first. Phones often drop for a few seconds and come back on their own,
+    // so: wait 4 s → the creator asks for a new network path (ICE restart), keeping the cameras
+    // and photo channel open → only rebuild everything if still down after 15 s.
+    let restartTimer: ReturnType<typeof setTimeout> | undefined, escalateTimer: ReturnType<typeof setTimeout> | undefined;
+    let restarting = false, handledRestart = 0, iceRestarts = 0;
+    function clearRecovery() { clearTimeout(restartTimer); clearTimeout(escalateTimer); restartTimer = escalateTimer = undefined; }
+    async function restartIce(force = false) {
+      const active = pc;
+      if (stopped || !active || room!.role !== 'host' || !guestId || active.signalingState !== 'stable' || (!force && active.connectionState === 'connected')) return;
+      iceRestarts++; recordDiagnostic('camera_ice_restart');
+      setPhase('Finding a new network path between your cameras…');
+      negotiationGeneration = Date.now(); restarting = true;
+      await active.setLocalDescription(await active.createOffer({ iceRestart: true }));
+      if (!stopped && pc === active) void signal({ type: 'offer', session, to: guestId, restart: true, description: { type: 'offer', sdp: active.localDescription!.sdp } }).catch(report);
+    }
+    function beginRecovery(urgent: boolean) {
+      if (stopped) return;
+      setPhase(automaticRetries.current >= 3 ? `Still reconnecting your cameras (attempt ${automaticRetries.current + 1}). Keep both pages open.` : 'Connection interrupted. Reconnecting your cameras…');
+      if (room!.role === 'host' && !restartTimer) restartTimer = setTimeout(() => { restartTimer = undefined; void restartIce().catch(() => {}); }, urgent ? 0 : 4000);
+      if (!escalateTimer) escalateTimer = setTimeout(() => { escalateTimer = undefined; if (!stopped && !(pc?.connectionState === 'connected' && channelsOpen())) recover(0); }, 15000);
+    }
     setRemote(null); setConnected(false); setError('');
     const report = (e: unknown) => { if (!stopped) {const reference=recordDiagnostic('camera_failed',Date.now()-startedAt);setError(`${e instanceof Error ? e.message : 'Camera connection interrupted. Try reconnecting.'} Support reference: ${reference}.`);} };
     setPhase(room.role === 'host' ? 'Waiting for your person’s camera to connect' : 'Contacting your creator’s camera');
@@ -125,11 +151,13 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         if (stopped || active?.readyState !== 'open') throw new Error('Wait for both cameras to connect.');
         if (data.length > 6000000) throw new Error('This photo is too large to share. Please try again.');
         const progress=transferProgress();
+        if(!small){transferring++;if(pc)void applyQuality(pc);}
         try {
         active.send(JSON.stringify({ type: 'begin', id, size: data.length }));
         for (let offset = 0; offset < data.length; offset += 12000) {
           progress.check(active.bufferedAmount);
-          while (active.bufferedAmount > 32000) {
+          // Keep up to ~1 MB queued: a 32 KB window capped relayed links at ~100–200 KB/s.
+          while (active.bufferedAmount > 1048576) {
             if (stopped || active.readyState !== 'open') throw new Error('Camera connection closed.');
             progress.check(active.bufferedAmount);
             await new Promise(resolve => setTimeout(resolve, 40));
@@ -138,10 +166,16 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
           // Register before sending the final chunk, so even a fast ACK is seen.
           if (offset + 12000 >= data.length) {
             await new Promise<void>((resolve, reject) => {
-              const timeout = setTimeout(() => { acknowledgments.delete(id); reject(new Error('Your person did not receive the photo. Please reconnect and retake it.')); }, 20000);
-              acknowledgments.set(id, { resolve: () => { clearTimeout(timeout); resolve(); }, reject: e => { clearTimeout(timeout); reject(e); } });
+              // Fail only if nothing has left this phone for 20 s, not after a fixed 20 s:
+              // up to 1 MB may still be queued when the last chunk is added.
+              const watch = ackWatch();
+              const timer = setInterval(() => {
+                if (active.readyState !== 'open') { clearInterval(timer); acknowledgments.delete(id); reject(new Error('Camera connection closed.')); return; }
+                if (watch.expired(active.bufferedAmount)) { clearInterval(timer); acknowledgments.delete(id); reject(new Error('Your person did not receive the photo. Please reconnect and retake it.')); }
+              }, 1000);
+              acknowledgments.set(id, { resolve: () => { clearInterval(timer); resolve(); }, reject: e => { clearInterval(timer); reject(e); } });
               try { active.send(JSON.stringify({ type: 'part', id, data: data.slice(offset, offset + 12000) })); }
-              catch (e) { clearTimeout(timeout); acknowledgments.delete(id); reject(e); }
+              catch (e) { clearInterval(timer); acknowledgments.delete(id); reject(e); }
             });
           } else active.send(JSON.stringify({ type: 'part', id, data: data.slice(offset, offset + 12000) }));
           progress.sent(active.bufferedAmount);
@@ -149,14 +183,14 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         } catch(error) {
           if(active.readyState==='open')try{active.send(JSON.stringify({type:'cancel',id}));}catch{/* Peer may close during cleanup. */}
           throw error;
-        }
+        } finally { if(!small){transferring--;if(pc)void applyQuality(pc);} }
       });
       // The capture manager owns photo retry UI. A slow photo is not a failed camera.
       if(!small)outgoing = task.catch(()=>{});
       return task;
     };
     function createPeer(id: string) {
-      closePeer(); session = id; negotiationGeneration = Date.now();
+      closePeer(); session = id; negotiationGeneration = Date.now(); restarting = false;
       quality=createPreviewQuality();previousStats=new Map();healthySince=0;
       setPhase('Finding a route between your cameras');
       if (!config) throw new Error('Camera connection settings are still loading.');
@@ -175,14 +209,14 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
       next.onicecandidate = event => { if (!stopped && pc === next && event.candidate) void signal({ type: 'candidate', session: id, candidate: event.candidate.toJSON() }).catch(report); };
       next.onconnectionstatechange = () => {
         if (stopped || pc !== next) return;
-        if (next.connectionState === 'failed' || next.connectionState === 'disconnected') { healthySince=0;setConnected(false);setPhase('Connection interrupted. Allowing the network to recover…'); }
-        if (next.connectionState === 'failed' || next.connectionState === 'disconnected') recover();
-        if (next.connectionState === 'connected' && channelsOpen()) { clearTimeout(recoveryTimer);recoveryTimer=undefined;setConnected(true); setError('');setPhase('Your cameras are connected'); }
+        if (next.connectionState === 'failed' || next.connectionState === 'disconnected') { healthySince=0;setConnected(false);beginRecovery(next.connectionState === 'failed'); }
+        if (next.connectionState === 'connected' && channelsOpen()) { clearRecovery();clearTimeout(recoveryTimer);recoveryTimer=undefined;restarting=false;setConnected(true); setError('');setPhase('Your cameras are connected'); }
       };
       next.oniceconnectionstatechange = () => {
         if (stopped || pc !== next) return;
         if (next.iceConnectionState === 'checking') setPhase('Camera details exchanged. Checking the network connection');
-        if (next.iceConnectionState === 'failed') { setConnected(false); setPhase('The camera connection failed'); setError(config?.relayConfigured ? 'The network could not reach the other camera, even with the relay. Try reconnecting and check Connection details below.' : 'Your cameras are on, but the network could not connect them directly. This booth needs a TURN relay to connect across networks that block video.'); }
+        // Handled by the recovery steps above; a popup here would pause the capture while it is still fixing itself.
+        if (next.iceConnectionState === 'failed') { setConnected(false); beginRecovery(true); }
       };
       next.ondatachannel = event => attach(event.channel);
       return next;
@@ -202,7 +236,16 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         offerGeneration = generation;
       }
       if (message.type === 'hello' && room!.role === 'host' && guestId === message.session && pc?.signalingState === 'have-local-offer') {
-        void signal({ type: 'offer', session, to: guestId, description: { type: 'offer', sdp: pc.localDescription!.sdp } }).catch(report);
+        void signal({ type: 'offer', session, to: guestId, restart: restarting, description: { type: 'offer', sdp: pc.localDescription!.sdp } }).catch(report);
+      } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session === session && message.restart && pc && message.description?.type === 'offer') {
+        // ICE restart from the creator: same connection, new network path. Cameras and the photo channel stay open.
+        const generation = message.generation || 0;
+        if (generation === handledRestart && pc.localDescription?.type === 'answer') { void signal({ type: 'answer', session, description: { type: 'answer', sdp: pc.localDescription.sdp } }).catch(report); return; }
+        handledRestart = generation; iceRestarts++;
+        negotiationGeneration = generation || negotiationGeneration;
+        await pc.setRemoteDescription(message.description);
+        await pc.setLocalDescription(await pc.createAnswer());
+        if (!stopped) void signal({ type: 'answer', session, description: { type: 'answer', sdp: pc.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'offer' && room!.role === 'guest' && message.to === localId && message.session === session && pc?.localDescription?.type === 'answer') {
         void signal({ type: 'answer', session, description: { type: 'answer', sdp: pc.localDescription.sdp } }).catch(report);
       } else if (message.type === 'hello' && room!.role === 'host' && (guestId !== message.session || !pc?.localDescription)) {
@@ -219,7 +262,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
         await next.setLocalDescription(await next.createAnswer());
         if (!stopped) void signal({ type: 'answer', session, description: { type: 'answer', sdp: next.localDescription!.sdp } }).catch(report);
       } else if (message.type === 'answer' && room!.role === 'host' && message.session === session && pc?.signalingState === 'have-local-offer' && message.description?.type === 'answer') {
-        await pc.setRemoteDescription(message.description);
+        await pc.setRemoteDescription(message.description); restarting = false;
         for (const item of candidates.filter(item => item.session === session)) { try { await pc.addIceCandidate(item.candidate); } catch (e) { report(e); } }
         candidates = [];
       } else if (message.type === 'candidate' && message.candidate) {
@@ -256,7 +299,7 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
           if (report.type === 'remote-candidate') remoteCandidates++;
         });
         // Intentionally exclude tokens, room codes, SDP, addresses and photos.
-        setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nSelected route: ${route}\nNetwork round trip: ${roundTrip}\nPreview mode: ${qualityStatus}\nSending: ${sample.sent}\nReceiving: ${sample.received}\nRemote packet loss: ${sample.loss===undefined ? 'Unavailable' : (sample.loss*100).toFixed(1)+'%'}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
+        setDiagnostics(`Role: ${room.role}\nTransport: ${transportName}\nConnection time: ${((connectedAfter ?? Date.now() - startedAt) / 1000).toFixed(1)} seconds\nAutomatic retries: ${automaticRetries.current}\nNetwork path refreshes: ${iceRestarts}\nSignaling: ${active.signalingState}\nNetwork: ${active.iceConnectionState}\nConnection: ${active.connectionState}\nPhoto channel: ${channel?.readyState || 'not created'}\nLocal routes: ${localCandidates}\nRemote routes: ${remoteCandidates}\nSelected route: ${route}\nNetwork round trip: ${roundTrip}\nPreview mode: ${qualityStatus}\nSending: ${sample.sent}\nReceiving: ${sample.received}\nRemote packet loss: ${sample.loss===undefined ? 'Unavailable' : (sample.loss*100).toFixed(1)+'%'}\nVideo frames received: ${receivedFrames}\nRelay configured: ${config?.relayConfigured ? 'yes' : 'no'}`);
       }).catch(() => {}).finally(()=>{statsBusy=false;});
     }, 2000);
     const configPromise = preparation.current?.token === room.token ? preparation.current.promise : connectionRetry(() => roomRequest<RtcConfig>('rtc', auth), () => stopped);
@@ -278,15 +321,21 @@ export function useDuoPeer(room: RoomSession | null, stream: MediaStream | null,
     }).catch(report);
     const timeout = setTimeout(() => {
       if (!stopped && (pc?.connectionState !== 'connected' || !channelsOpen())) {
-        setError(current => current || (pc?.connectionState === 'connected' ? 'The photo controls could not connect. Refresh both devices to use the latest booth version, then reconnect.' : 'The camera handshake is taking longer than expected. Retrying the connection; keep both camera pages open.'));
+        if (pc?.connectionState === 'connected') setError(current => current || 'The photo controls could not connect. Refresh both devices to use the latest booth version, then reconnect.');
+        else setPhase('The camera handshake is taking longer than expected. Retrying; keep both camera pages open.');
         if (config) recover();
       }
     }, 25000);
-    const hide = () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
-    const online=()=>{if(!stopped&&pc?.connectionState!=='connected'){automaticRetries.current=0;recover();}};
+    const hide = () => { stopped = true; clearRecovery(); transport?.close(); clearTimeout(recoveryTimer); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); };
+    const online=()=>{if(!stopped&&pc?.connectionState!=='connected'){automaticRetries.current=0;beginRecovery(true);}};
+    // Switching between Wi-Fi and mobile data changes the network path: refresh it right away.
+    // The old path can still look "connected" for a few seconds, so the creator refreshes it immediately.
+    const networkChanged=()=>{if(!stopped&&room.role==='host'&&pc&&pc.connectionState!=='new')void restartIce(true).catch(()=>{});};
+    const connection=(navigator as Navigator & {connection?:EventTarget}).connection;
     window.addEventListener('pagehide', hide);
     window.addEventListener('online',online);
-    return () => { stopped = true; transport?.close(); clearTimeout(recoveryTimer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide);window.removeEventListener('online',online); };
+    connection?.addEventListener('change',networkChanged);
+    return () => { stopped = true; clearRecovery(); connection?.removeEventListener('change',networkChanged); transport?.close(); clearTimeout(recoveryTimer); clearTimeout(timeout); clearInterval(helloTimer); clearInterval(statsTimer); closePeer(); window.removeEventListener('pagehide', hide);window.removeEventListener('online',online); };
   }, [room?.token, stream, attempt]);
   return { remote, connected, error, phase, diagnostics, reconnect: () => { automaticRetries.current = 0; setAttempt(value => value + 1); }, send: (event: DuoEvent) => sender.current(event) };
 }
