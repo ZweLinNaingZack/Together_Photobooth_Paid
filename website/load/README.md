@@ -46,7 +46,7 @@ These scripts imitate real duo booths (a host and a guest each) against a **stag
 | 3b | `k6 run -e BOOTHS=50 -e SPIKE=10 load/booths.js` | Same, plus 10 booths created at the same moment mid-test. |
 | 4 | `node load/cleanup.mjs` | Deletes all test rooms, reservations, sessions, points and accounts. |
 
-Options: `HOLD` (seconds each booth stays, default 600), `RAMP` (seconds to start all booths, default 300), `RTC=0` (skip relay credentials).
+Options: `HOLD` (seconds each booth stays, default 600), `RAMP` (seconds to start all booths, default 300), `RTC=0` (skip relay credentials), `STATE_EVERY` (check-in seconds once both are ready; default 4 like the app, `1.5` reproduces the old app).
 
 While step 3 runs, keep open:
 - **Supabase (staging) → Reports:** database CPU, connections, API requests.

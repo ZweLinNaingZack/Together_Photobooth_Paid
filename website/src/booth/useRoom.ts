@@ -70,7 +70,9 @@ export function useRoom(keepOnHide?: RefObject<boolean>) {
           setError(e instanceof Error ? e.message : 'Connection interrupted. Reconnecting…');
         } }
       }
-      if (!stopped) timer = setTimeout(poll, 1500);
+      // Check in every 1.5 s while waiting for each other; once both are ready (cameras phase),
+      // every 4 s is enough: the camera connection itself shows whether the partner is there.
+      if (!stopped) timer = setTimeout(poll, current.current?.bothReady ? 4000 : 1500);
     }
     void poll(); return () => { stopped = true; clearTimeout(timer); };
   }, [room?.token]);

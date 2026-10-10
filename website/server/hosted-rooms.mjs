@@ -1,11 +1,17 @@
 import { createRoomService } from './rooms.mjs';
 import { createTurnProvider } from './turn.mjs';
 const fail = (message, status) => Object.assign(new Error(message), { status });
-export function createHostedRoomService({ store, rtcConfig = createTurnProvider() }) {
+// A check-in only needs to save "I'm still here" this often. Presence counts as online for
+// 15 s, so saving at most every 5 s keeps people online while most check-ins become plain reads
+// (no save, and no host/guest save collisions on the same room row).
+export const SEEN_REFRESH_MS = 5000;
+export function createHostedRoomService({ store, rtcConfig = createTurnProvider(), now = Date.now }) {
   return { async run(action, body, userId) {
     if (!userId) throw fail('Please sign in first.', 401);
     // Two devices may use the same account; allow both heartbeat/signaling loops.
-    if (!await store.limit(`${userId}:all`, 600)) throw fail('Too many requests. Please wait a minute.', 429);
+    // Check-ins and message polling are frequent and now mostly read-only, so they skip the
+    // per-request rate-limit write. Everything that creates or changes something is still limited.
+    if (!['state', 'signals'].includes(action) && !await store.limit(`${userId}:all`, 600)) throw fail('Too many requests. Please wait a minute.', 429);
     if (['create','join','rtc'].includes(action) && !await store.limit(`${userId}:${action}`,20)) throw fail('Too many attempts. Please wait a minute.',429);
     // Return this account's own open seat so a device that lost its saved copy can reconnect.
     // Only rooms where this user is the host or guest are considered, and only their own token is returned.
@@ -17,7 +23,7 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
         if (!role) continue;
         try {
           // Reuse the room rules: an expired room, or one whose host has been gone over 60 s, throws here.
-          createRoomService({ rooms: new Map([[room.code, structuredClone(room)]]), rtcConfig }).run('state', { code: room.code, token: room[role].token }, userId);
+          createRoomService({ rooms: new Map([[room.code, structuredClone(room)]]), rtcConfig, now }).run('state', { code: room.code, token: room[role].token }, userId);
           return { room: { code: room.code, token: room[role].token, role, ...(role === 'host' ? { invite: room.invite } : {}) } };
         } catch { /* closed room: try the next one */ }
       }
@@ -32,12 +38,16 @@ export function createHostedRoomService({ store, rtcConfig = createTurnProvider(
         if (!member || member.userId !== userId) throw fail('You are not connected to this booth.',403);
       }
       if (action === 'rtc' && store.authorize && !await store.authorize(room.invite,room.host.userId)) throw fail('The creator needs to authorize this booth before the cameras connect.',409);
+      const member = room && (room.host.token === body.token ? room.host : room.guest?.token === body.token ? room.guest : null);
+      const seenBefore = member?.seen;
       const rooms = new Map(room ? [[room.code,room]] : []);
-      const service = createRoomService({ rooms, rtcConfig });
+      const service = createRoomService({ rooms, rtcConfig, now });
       const result = await service.run(action, body, userId);
       // The separate state heartbeat owns presence. Reading camera messages must
       // not contend with offer/answer writes or invalidate their room version.
       if (action === 'signals') return result;
+      // Recent check-in already saved: answer from what was loaded, without writing.
+      if (action === 'state' && Number.isFinite(seenBefore) && now() - seenBefore < SEEN_REFRESH_MS) return result;
       // Credentials are short-lived and cached by this browser's camera session.
       // Do not hold up the handshake trying to persist them against heartbeats.
       if (action === 'rtc') return { ...result, signalTopic: room.signalTopic || null };

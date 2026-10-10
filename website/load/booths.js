@@ -10,7 +10,8 @@
 //   k6 run -e BOOTHS=2 load/booths.js                   quick check
 //   k6 run -e BOOTHS=50 load/booths.js                  the real test (ramps up over RAMP seconds)
 //   k6 run -e BOOTHS=50 -e SPIKE=10 load/booths.js      plus 10 booths created at once mid-test
-// Options: HOLD (seconds in the booth, default 600), RAMP (default 300), RTC=0 to skip relay credentials.
+// Options: HOLD (seconds in the booth, default 600), RAMP (default 300), RTC=0 to skip relay credentials,
+//          STATE_EVERY (check-in seconds once both are ready; default 4 like the app, 1.5 = old app).
 import http from 'k6/http';
 import { sleep } from 'k6';
 import exec from 'k6/execution';
@@ -33,6 +34,7 @@ const PASSWORD = file.LOADTEST_PASSWORD;
 const BOOTHS = Number(__ENV.BOOTHS || 2), SPIKE = Number(__ENV.SPIKE || 0);
 const HOLD = Number(__ENV.HOLD || 600), RAMP = Number(__ENV.RAMP || (BOOTHS > 5 ? 300 : 10));
 const RTC = __ENV.RTC !== '0';
+const STATE_EVERY = Number(__ENV.STATE_EVERY || 4);
 if (!SITE || !SUPABASE || !KEY || !PASSWORD) throw new Error('website/.env.loadtest is incomplete. See load/README.md.');
 for (const [name, value] of [['STAGING_SITE_URL', SITE], ['STAGING_SUPABASE_URL', SUPABASE]])
   if (!/^https?:\/\//.test(value)) throw new Error(`${name} must start with https:// (for example https://your-staging-url.vercel.app).`);
@@ -135,19 +137,23 @@ export default function () {
       sleep(0.8);
     }
 
-    // In the booth: each person checks in every 1.5 s and polls connection messages every 5 s.
+    // In the booth: each person checks in every STATE_EVERY seconds (the app uses 4 s once both
+    // are ready; use -e STATE_EVERY=1.5 to reproduce the old app) and polls connection messages every 5 s.
     const end = Date.now() + HOLD * 1000;
-    let tick = 0;
+    let nextState = 0, nextSignals = 0;
     while (Date.now() < end) {
-      const started = Date.now();
-      room(hostJwt, 'state', { code: host.code, token: host.token });
-      room(guestJwt, 'state', { code: guest.code, token: guest.token });
-      if (tick % 3 === 0) {
+      const now = Date.now();
+      if (now >= nextState) {
+        nextState = now + STATE_EVERY * 1000;
+        room(hostJwt, 'state', { code: host.code, token: host.token });
+        room(guestJwt, 'state', { code: guest.code, token: guest.token });
+      }
+      if (now >= nextSignals) {
+        nextSignals = now + 5000;
         hostCursor = room(hostJwt, 'signals', { code: host.code, token: host.token, after: hostCursor }).cursor;
         guestCursor = room(guestJwt, 'signals', { code: guest.code, token: guest.token, after: guestCursor }).cursor;
       }
-      tick++;
-      sleep(Math.max(0, 1.5 - (Date.now() - started) / 1000));
+      sleep(Math.max(0.05, (Math.min(nextState, nextSignals) - Date.now()) / 1000));
     }
 
     // Host confirms editing: completes the session (charges 100 test points).
@@ -176,6 +182,7 @@ export function handleSummary(data) {
   lines.push(`"Booth busy" conflicts:  ${m.room_busy_conflicts?.values.count ?? 0}`);
   lines.push(`Rate limited (429):      ${m.rate_limited?.values.count ?? 0}`);
   lines.push(`Server errors (5xx):     ${m.server_errors?.values.count ?? 0}`);
+  lines.push(`Check-in every:          ${STATE_EVERY}s`);
   lines.push('', 'Response times by step (typical / slowest 5% / worst):');
   for (const name of actions) {
     const metric = m[`http_req_duration{name:${name}}`];
