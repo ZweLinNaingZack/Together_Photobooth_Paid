@@ -71,14 +71,14 @@ const en: LegalLanguage = {
       intro: 'This policy explains what information Together collects, why, and what you can ask us to do with it. The short version: **your photos and video never reach our servers.** We only keep what we need to run your account, points and payments. Together is run by {operator} (Myanmar); contact {mail}.',
       sections: [
         { h: '1. What we never collect', body: [[
-          '**Photos and live video.** They are captured and edited on your device. In a duo booth they travel directly between the two devices, or, when a direct connection is not possible, through an encrypted relay run by Cloudflare that passes them along without storing them.',
+          '**Photos and live video.** They are captured and edited on your device. In a duo booth they travel directly between the two devices, or, when a direct connection is not possible, through an encrypted relay server that passes them along without storing them.',
           'To help you recover from a refresh, the booth keeps a temporary copy of your session in **your own browser** for up to 24 hours. It never leaves your device, and you can turn it off in the booth.']] },
         { h: '2. What we collect', body: [[
           '**Account:** your email address and, if you sign in with Google, the basic profile Google shares (such as your name).',
           '**Points and sessions:** your points balance and history, when sessions were started and completed, and whether you have used your free session.',
           '**Top-ups:** the amount, the transfer receipt image you upload, any payment reference you enter, and whether it was approved. Receipts are visible only to you and the administrator.',
           '**Duo booths:** a temporary room code, who is in the room and whether you are ready or connected. Rooms end automatically within 45 minutes.',
-          '**Security:** IP addresses and sign-in attempt counts to protect accounts from password guessing, and a bot check (Cloudflare Turnstile) on sign-in forms.',
+          '**Security:** IP addresses and sign-in attempt counts to protect accounts from password guessing, and a bot check on sign-in forms.',
           '**Support details:** if you choose to copy and send us the booth’s “support details”, they contain connection measurements only, never photos or account details.']] },
         { h: '3. Why we use it', body: [[
           'To create and secure your account and sign you in.',
@@ -87,28 +87,21 @@ const en: LegalLanguage = {
           'To prevent abuse, for example giving the free session only once per email address.',
           'To answer your questions and fix problems.'],
           'We do not sell your information or use it for advertising.'] },
-        { h: '4. Services that help us run Together', body: [
-          'These providers process information on our behalf, only for the purposes above. Their servers may be in other countries.',
-          ['**Supabase** — accounts, sign-in and database (including receipt images).',
-           '**Vercel** — hosting the website and its servers.',
-           '**Cloudflare** — the camera relay for duo booths and the sign-in bot check.',
-           '**Resend** — sending account and payment emails.',
-           '**Google** — “Continue with Google” sign-in.']] },
-        { h: '5. How long we keep it', body: [[
+        { h: '4. How long we keep it', body: [[
           'Account, points and session information: while your account exists.',
           'Duo room information: until the room ends (within 45 minutes).',
           'After an account is deleted, we keep only what we still need: payment and points records (including receipts) for accounting, fraud prevention and resolving disputes, and a record that the email address has used its free session.']] },
-        { h: '6. Your choices', body: [
+        { h: '5. Your choices', body: [
           'Email {mail} from your account’s email address to:',
           ['get a copy of the information we hold about you,',
            'correct something that is wrong, or',
            '**delete your account.** Unused points are lost when an account is deleted, and the free session is not given again to the same email address.'],
           'We aim to reply within 30 days.'] },
-        { h: '7. Children', body: [
+        { h: '6. Children', body: [
           'Children under 13 may use Together only with a parent’s or guardian’s permission and supervision, and under-18s need permission to buy points. A parent or guardian can contact us at any time to review or delete their child’s account.'] },
-        { h: '8. Security', body: [
+        { h: '7. Security', body: [
           'Connections to Together are encrypted, each person can only reach their own account data, and administrative access is limited. No system is perfectly secure, but we work to protect your information and will act quickly if something goes wrong.'] },
-        { h: '9. Changes', body: [
+        { h: '8. Changes', body: [
           'If we change this policy, we will update the date at the top, and show a notice on the website for important changes.'] },
       ],
     },
@@ -142,7 +135,6 @@ const en: LegalLanguage = {
 
 const my: LegalLanguage = {
   label: 'မြန်မာ', locale: 'my', back: 'ပင်မစာမျက်နှာသို့', updated: 'နောက်ဆုံး ပြင်ဆင်သည့်ရက်', pickLabel: 'ဘာသာစကား',
-  notice: 'ဤဘာသာပြန်ကို အဆင်ပြေစေရန် ပေးထားခြင်း ဖြစ်ပါသည်။ ဘာသာစကားများကြား ကွဲလွဲမှု ရှိပါက အင်္ဂလိပ်ဘာသာ မူကို အတည်ယူပါမည်။',
   pages: {
     terms: {
       title: 'ဝန်ဆောင်မှု စည်းမျဉ်းများ',
@@ -186,14 +178,14 @@ const my: LegalLanguage = {
       intro: 'ဤမူဝါဒသည် Together က မည်သည့် အချက်အလက်များကို စုဆောင်းသည်၊ အဘယ်ကြောင့် စုဆောင်းသည်နှင့် ၎င်းတို့နှင့် ပတ်သက်၍ သင် မည်သို့ တောင်းဆိုနိုင်သည်ကို ရှင်းပြထားပါသည်။ အတိုချုပ်ဆိုရလျှင် **သင့်ဓာတ်ပုံနှင့် ဗီဒီယိုများ ကျွန်ုပ်တို့၏ server များသို့ မည်သည့်အခါမျှ မရောက်ပါ။** သင့်အကောင့်၊ points နှင့် ငွေပေးချေမှုများကို လုပ်ဆောင်ရန် လိုအပ်သည်များကိုသာ သိမ်းဆည်းပါသည်။ Together ကို {operator} (မြန်မာနိုင်ငံ) က လုပ်ကိုင်ပါသည်။ ဆက်သွယ်ရန် - {mail}',
       sections: [
         { h: '၁။ ကျွန်ုပ်တို့ မည်သည့်အခါမျှ မစုဆောင်းသည်များ', body: [[
-          '**ဓာတ်ပုံများနှင့် live video -** ၎င်းတို့ကို သင့်စက်ပေါ်တွင် ရိုက်ကူး တည်းဖြတ်ပါသည်။ Duo booth တွင် စက်နှစ်ခုကြား တိုက်ရိုက် ပေးပို့ပြီး တိုက်ရိုက် ချိတ်ဆက်၍ မရပါက Cloudflare ၏ encrypted relay မှတစ်ဆင့် သိမ်းဆည်းခြင်း မရှိဘဲ ဖြတ်သန်း ပေးပို့ပါသည်။',
+          '**ဓာတ်ပုံများနှင့် live video -** ၎င်းတို့ကို သင့်စက်ပေါ်တွင် ရိုက်ကူး တည်းဖြတ်ပါသည်။ Duo booth တွင် စက်နှစ်ခုကြား တိုက်ရိုက် ပေးပို့ပြီး တိုက်ရိုက် ချိတ်ဆက်၍ မရပါက encrypted relay server မှတစ်ဆင့် သိမ်းဆည်းခြင်း မရှိဘဲ ဖြတ်သန်း ပေးပို့ပါသည်။',
           'Refresh လုပ်မိပါက ပြန်လည်ရယူနိုင်ရန် booth သည် သင့် session ၏ ယာယီမိတ္တူကို **သင့်ကိုယ်ပိုင် browser** အတွင်း အများဆုံး ၂၄ နာရီ သိမ်းထားပါသည်။ ၎င်းသည် သင့်စက်မှ မည်သည့်အခါမျှ ထွက်မသွားဘဲ booth တွင် ပိတ်ထားနိုင်ပါသည်။']] },
         { h: '၂။ ကျွန်ုပ်တို့ စုဆောင်းသည်များ', body: [[
           '**အကောင့် -** သင့် email လိပ်စာနှင့် Google ဖြင့် ဝင်ရောက်ပါက Google က မျှဝေသော အခြေခံ profile (ဥပမာ - သင့်အမည်)။',
           '**Points နှင့် session များ -** သင့် points လက်ကျန်နှင့် မှတ်တမ်း၊ session များ စတင်ချိန်နှင့် ပြီးဆုံးချိန်၊ အခမဲ့ session ကို သုံးပြီး မပြီး။',
           '**ငွေဖြည့်ခြင်း -** ငွေပမာဏ၊ သင် upload တင်သော ငွေလွှဲပြေစာ ပုံ၊ သင်ထည့်သော ငွေပေးချေမှု ရည်ညွှန်းနံပါတ်နှင့် အတည်ပြုခြင်း ရှိ မရှိ။ ပြေစာများကို သင်နှင့် စီမံခန့်ခွဲသူသာ ကြည့်နိုင်ပါသည်။',
           '**Duo booth များ -** ယာယီ room code၊ room ထဲတွင် မည်သူ ရှိသည်နှင့် အသင့်ဖြစ်မဖြစ် သို့မဟုတ် ချိတ်ဆက်ထားမထား။ Room များသည် မိနစ် ၄၅ အတွင်း အလိုအလျောက် ပြီးဆုံးပါသည်။',
-          '**လုံခြုံရေး -** စကားဝှက် ခန့်မှန်းဝင်ရောက်ခြင်းမှ အကောင့်များကို ကာကွယ်ရန် IP လိပ်စာများနှင့် ဝင်ရောက်ရန် ကြိုးစားမှု အရေအတွက်များ၊ ဝင်ရောက်သည့် form များတွင် bot စစ်ဆေးမှု (Cloudflare Turnstile)။',
+          '**လုံခြုံရေး -** စကားဝှက် ခန့်မှန်းဝင်ရောက်ခြင်းမှ အကောင့်များကို ကာကွယ်ရန် IP လိပ်စာများနှင့် ဝင်ရောက်ရန် ကြိုးစားမှု အရေအတွက်များ၊ ဝင်ရောက်သည့် form များတွင် bot စစ်ဆေးမှု။',
           '**အကူအညီ အချက်အလက်များ -** booth ၏ “support details” ကို ကူးယူ၍ ကျွန်ုပ်တို့ထံ ပို့ရန် သင် ရွေးချယ်ပါက ၎င်းတွင် ချိတ်ဆက်မှု တိုင်းတာချက်များသာ ပါဝင်ပြီး ဓာတ်ပုံ သို့မဟုတ် အကောင့်အချက်အလက် မပါဝင်ပါ။']] },
         { h: '၃။ အသုံးပြုရသည့် အကြောင်းရင်း', body: [[
           'သင့်အကောင့်ကို ဖန်တီးရန်၊ လုံခြုံစေရန်နှင့် ဝင်ရောက်နိုင်စေရန်။',
@@ -202,28 +194,21 @@ const my: LegalLanguage = {
           'အလွဲသုံးစားမှုကို တားဆီးရန်၊ ဥပမာ - email လိပ်စာတစ်ခုလျှင် အခမဲ့ session တစ်ကြိမ်သာ ပေးရန်။',
           'သင့်မေးခွန်းများကို ဖြေကြားရန်နှင့် ပြဿနာများကို ဖြေရှင်းရန်။'],
           'သင့်အချက်အလက်များကို ကျွန်ုပ်တို့ မရောင်းချပါ၊ ကြော်ငြာအတွက်လည်း အသုံးမပြုပါ။'] },
-        { h: '၄။ Together ကို လည်ပတ်ရာတွင် ကူညီသော ဝန်ဆောင်မှုများ', body: [
-          'ဤဝန်ဆောင်မှုပေးသူများသည် အထက်ပါ ရည်ရွယ်ချက်များအတွက်သာ ကျွန်ုပ်တို့ကိုယ်စား အချက်အလက်များကို ကိုင်တွယ်ပါသည်။ ၎င်းတို့၏ server များသည် အခြားနိုင်ငံများတွင် ရှိနိုင်ပါသည်။',
-          ['**Supabase** — အကောင့်များ၊ ဝင်ရောက်ခြင်းနှင့် database (ငွေလွှဲပြေစာ ပုံများ အပါအဝင်)။',
-           '**Vercel** — website နှင့် ၎င်း၏ server များကို host လုပ်ခြင်း။',
-           '**Cloudflare** — duo booth များအတွက် ကင်မရာ relay နှင့် ဝင်ရောက်ရာတွင် bot စစ်ဆေးခြင်း။',
-           '**Resend** — အကောင့်နှင့် ငွေပေးချေမှုဆိုင်ရာ email များ ပေးပို့ခြင်း။',
-           '**Google** — “Continue with Google” ဖြင့် ဝင်ရောက်ခြင်း။']] },
-        { h: '၅။ သိမ်းဆည်းထားမည့် ကာလ', body: [[
+        { h: '၄။ သိမ်းဆည်းထားမည့် ကာလ', body: [[
           'အကောင့်၊ points နှင့် session အချက်အလက်များ - သင့်အကောင့် ရှိနေသရွေ့။',
           'Duo room အချက်အလက် - room ပြီးဆုံးသည်အထိ (မိနစ် ၄၅ အတွင်း)။',
           'အကောင့်ဖျက်ပြီးနောက် လိုအပ်နေဆဲ အချက်အလက်များကိုသာ သိမ်းထားပါသည် - စာရင်းကိုင်ခြင်း၊ လိမ်လည်မှု တားဆီးခြင်းနှင့် အငြင်းပွားမှုများ ဖြေရှင်းခြင်းအတွက် ငွေပေးချေမှုနှင့် points မှတ်တမ်းများ (ပြေစာများ အပါအဝင်) နှင့် ထို email လိပ်စာက အခမဲ့ session သုံးပြီးကြောင်း မှတ်တမ်း။']] },
-        { h: '၆။ သင့်ရွေးချယ်ခွင့်များ', body: [
+        { h: '၅။ သင့်ရွေးချယ်ခွင့်များ', body: [
           'အောက်ပါတို့အတွက် သင့်အကောင့်၏ email လိပ်စာမှ {mail} သို့ email ပို့ပါ -',
           ['ကျွန်ုပ်တို့ သိမ်းထားသော သင့်အချက်အလက်များ၏ မိတ္တူ ရယူရန်၊',
            'မှားယွင်းနေသည်များကို ပြင်ဆင်ရန်၊ သို့မဟုတ်',
            '**သင့်အကောင့်ကို ဖျက်ရန်။** အကောင့်ဖျက်လိုက်ပါက မသုံးရသေးသော points များ ဆုံးရှုံးမည်ဖြစ်ပြီး တူညီသော email လိပ်စာအတွက် အခမဲ့ session ကို ထပ်မံ မပေးပါ။'],
           'ရက် ၃၀ အတွင်း ပြန်ကြားရန် ကြိုးစားပါသည်။'] },
-        { h: '၇။ ကလေးများ', body: [
+        { h: '၆။ ကလေးများ', body: [
           'အသက် ၁၃ နှစ်အောက် ကလေးများသည် မိဘ သို့မဟုတ် အုပ်ထိန်းသူ၏ ခွင့်ပြုချက်နှင့် ကြီးကြပ်မှုဖြင့်သာ Together ကို အသုံးပြုနိုင်ပြီး အသက် ၁၈ နှစ်အောက်သူများ points ဝယ်ရန် ခွင့်ပြုချက် လိုအပ်ပါသည်။ မိဘ သို့မဟုတ် အုပ်ထိန်းသူသည် ၎င်းတို့ ကလေး၏ အကောင့်ကို ပြန်လည်စစ်ဆေးရန် သို့မဟုတ် ဖျက်ရန် အချိန်မရွေး ဆက်သွယ်နိုင်ပါသည်။'] },
-        { h: '၈။ လုံခြုံရေး', body: [
+        { h: '၇။ လုံခြုံရေး', body: [
           'Together သို့ ချိတ်ဆက်မှုများကို encrypt လုပ်ထားပြီး လူတစ်ဦးစီသည် မိမိ၏ အကောင့်အချက်အလက်များကိုသာ ဝင်ကြည့်နိုင်ကာ စီမံခန့်ခွဲခွင့်ကို ကန့်သတ်ထားပါသည်။ မည်သည့်စနစ်မျှ အပြည့်အဝ လုံခြုံသည် မဟုတ်သော်လည်း သင့်အချက်အလက်များကို ကာကွယ်ရန် ကြိုးစားပြီး ပြဿနာ တစ်စုံတစ်ရာ ဖြစ်ပေါ်ပါက အမြန်ဆုံး ဆောင်ရွက်ပါမည်။'] },
-        { h: '၉။ ပြောင်းလဲမှုများ', body: [
+        { h: '၈။ ပြောင်းလဲမှုများ', body: [
           'ဤမူဝါဒကို ပြောင်းလဲပါက ထိပ်ရှိ ရက်စွဲကို ပြင်ဆင်မည်ဖြစ်ပြီး အရေးကြီးသော ပြောင်းလဲမှုများအတွက် website ပေါ်တွင် အသိပေးချက် ပြသပါမည်။'] },
       ],
     },
@@ -257,7 +242,6 @@ const my: LegalLanguage = {
 
 const vi: LegalLanguage = {
   label: 'Tiếng Việt', locale: 'vi', back: 'Về trang chủ', updated: 'Cập nhật lần cuối', pickLabel: 'Ngôn ngữ',
-  notice: 'Bản dịch này được cung cấp để bạn tiện theo dõi. Nếu có khác biệt giữa các ngôn ngữ, bản tiếng Anh sẽ được áp dụng.',
   pages: {
     terms: {
       title: 'Điều khoản dịch vụ',
@@ -301,14 +285,14 @@ const vi: LegalLanguage = {
       intro: 'Chính sách này giải thích Together thu thập thông tin gì, vì sao, và bạn có thể yêu cầu chúng tôi làm gì với thông tin đó. Tóm lại: **ảnh và video của bạn không bao giờ đến máy chủ của chúng tôi.** Chúng tôi chỉ giữ những gì cần thiết để vận hành tài khoản, điểm và thanh toán của bạn. Together do {operator} (Myanmar) vận hành; liên hệ {mail}.',
       sections: [
         { h: '1. Những gì chúng tôi không bao giờ thu thập', body: [[
-          '**Ảnh và video trực tiếp.** Chúng được chụp và chỉnh sửa trên thiết bị của bạn. Trong booth đôi, chúng được truyền trực tiếp giữa hai thiết bị, hoặc khi không thể kết nối trực tiếp, qua một máy chủ chuyển tiếp được mã hóa của Cloudflare, chỉ chuyển tiếp mà không lưu trữ.',
+          '**Ảnh và video trực tiếp.** Chúng được chụp và chỉnh sửa trên thiết bị của bạn. Trong booth đôi, chúng được truyền trực tiếp giữa hai thiết bị, hoặc khi không thể kết nối trực tiếp, qua một máy chủ chuyển tiếp được mã hóa, chỉ chuyển tiếp mà không lưu trữ.',
           'Để giúp bạn khôi phục khi tải lại trang, booth giữ một bản sao tạm thời của phiên trong **trình duyệt của chính bạn** tối đa 24 giờ. Bản sao này không bao giờ rời khỏi thiết bị và bạn có thể tắt nó trong booth.']] },
         { h: '2. Những gì chúng tôi thu thập', body: [[
           '**Tài khoản:** địa chỉ email của bạn và, nếu bạn đăng nhập bằng Google, hồ sơ cơ bản mà Google chia sẻ (như tên của bạn).',
           '**Điểm và phiên:** số dư và lịch sử điểm, thời điểm bắt đầu và hoàn thành các phiên, và việc bạn đã dùng phiên miễn phí hay chưa.',
           '**Nạp điểm:** số tiền, ảnh biên lai chuyển khoản bạn tải lên, mã tham chiếu thanh toán bạn nhập (nếu có) và trạng thái phê duyệt. Biên lai chỉ bạn và quản trị viên xem được.',
           '**Booth đôi:** mã phòng tạm thời, ai đang ở trong phòng và trạng thái sẵn sàng hoặc kết nối. Phòng tự động kết thúc trong vòng 45 phút.',
-          '**Bảo mật:** địa chỉ IP và số lần thử đăng nhập để bảo vệ tài khoản khỏi việc đoán mật khẩu, cùng bước kiểm tra chống bot (Cloudflare Turnstile) trên các biểu mẫu đăng nhập.',
+          '**Bảo mật:** địa chỉ IP và số lần thử đăng nhập để bảo vệ tài khoản khỏi việc đoán mật khẩu, cùng bước kiểm tra chống bot trên các biểu mẫu đăng nhập.',
           '**Thông tin hỗ trợ:** nếu bạn chọn sao chép và gửi cho chúng tôi “support details” của booth, chúng chỉ chứa các số đo kết nối, không bao giờ có ảnh hay thông tin tài khoản.']] },
         { h: '3. Mục đích sử dụng', body: [[
           'Để tạo, bảo vệ tài khoản và cho bạn đăng nhập.',
@@ -317,28 +301,21 @@ const vi: LegalLanguage = {
           'Để ngăn chặn lạm dụng, ví dụ chỉ cấp phiên miễn phí một lần cho mỗi địa chỉ email.',
           'Để trả lời câu hỏi và khắc phục sự cố.'],
           'Chúng tôi không bán thông tin của bạn và không dùng nó cho quảng cáo.'] },
-        { h: '4. Các dịch vụ giúp vận hành Together', body: [
-          'Các nhà cung cấp sau xử lý thông tin thay mặt chúng tôi, chỉ cho các mục đích nêu trên. Máy chủ của họ có thể đặt tại các quốc gia khác.',
-          ['**Supabase** — tài khoản, đăng nhập và cơ sở dữ liệu (bao gồm ảnh biên lai).',
-           '**Vercel** — lưu trữ website và máy chủ.',
-           '**Cloudflare** — máy chủ chuyển tiếp camera cho booth đôi và kiểm tra chống bot khi đăng nhập.',
-           '**Resend** — gửi email về tài khoản và thanh toán.',
-           '**Google** — đăng nhập bằng “Continue with Google”.']] },
-        { h: '5. Thời gian lưu trữ', body: [[
+        { h: '4. Thời gian lưu trữ', body: [[
           'Thông tin tài khoản, điểm và phiên: trong suốt thời gian tài khoản tồn tại.',
           'Thông tin phòng booth đôi: cho đến khi phòng kết thúc (trong vòng 45 phút).',
           'Sau khi tài khoản bị xóa, chúng tôi chỉ giữ những gì vẫn cần thiết: hồ sơ thanh toán và điểm (bao gồm biên lai) cho mục đích kế toán, phòng chống gian lận và giải quyết tranh chấp, cùng một bản ghi cho biết địa chỉ email đó đã dùng phiên miễn phí.']] },
-        { h: '6. Quyền lựa chọn của bạn', body: [
+        { h: '5. Quyền lựa chọn của bạn', body: [
           'Gửi email đến {mail} từ địa chỉ email của tài khoản để:',
           ['nhận bản sao thông tin chúng tôi lưu về bạn,',
            'sửa thông tin không chính xác, hoặc',
            '**xóa tài khoản của bạn.** Điểm chưa dùng sẽ mất khi tài khoản bị xóa, và phiên miễn phí sẽ không được cấp lại cho cùng địa chỉ email.'],
           'Chúng tôi cố gắng phản hồi trong vòng 30 ngày.'] },
-        { h: '7. Trẻ em', body: [
+        { h: '6. Trẻ em', body: [
           'Trẻ em dưới 13 tuổi chỉ được dùng Together khi có sự cho phép và giám sát của cha mẹ hoặc người giám hộ, và người dưới 18 tuổi cần được cho phép để mua điểm. Cha mẹ hoặc người giám hộ có thể liên hệ với chúng tôi bất cứ lúc nào để xem lại hoặc xóa tài khoản của con.'] },
-        { h: '8. Bảo mật', body: [
+        { h: '7. Bảo mật', body: [
           'Kết nối đến Together được mã hóa, mỗi người chỉ truy cập được dữ liệu tài khoản của chính mình, và quyền quản trị được giới hạn. Không hệ thống nào an toàn tuyệt đối, nhưng chúng tôi luôn nỗ lực bảo vệ thông tin của bạn và sẽ hành động nhanh chóng nếu có sự cố.'] },
-        { h: '9. Thay đổi', body: [
+        { h: '8. Thay đổi', body: [
           'Nếu thay đổi chính sách này, chúng tôi sẽ cập nhật ngày ở đầu trang và hiển thị thông báo trên website với những thay đổi quan trọng.'] },
       ],
     },
