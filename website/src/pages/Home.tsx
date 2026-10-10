@@ -1,3 +1,4 @@
+import { LegalLinks } from './LegalLinks';
 import { DecorativeIcon } from '../components/DecorativeIcon';
 import { HeroArt } from '../components/HeroArt';
 export function Home(){return (    <div id="home">
@@ -18,6 +19,6 @@ export function Home(){return (    <div id="home">
           <details><summary>Can I save or print my photocard?<span aria-hidden="true">+</span></summary><div className="faq-answer"><p>Yes. Choose PNG or JPG in the booth, then save your sample strip. You can keep the file, share it yourself, or print it. Your download includes the photos from your session, in the layout and style you chose.</p></div></details>
         </div>
       </section>
-      <footer><a className="wordmark" href="#">together<span className="brand-dot"><DecorativeIcon /></span></a><span>A little closer. Wherever you are.</span><span className="prototype-label">DESIGN PREVIEW · 2026</span></footer>
+      <footer><a className="wordmark" href="#">together<span className="brand-dot"><DecorativeIcon /></span></a><span>A little closer. Wherever you are.</span><LegalLinks /><span className="prototype-label">DESIGN PREVIEW · 2026</span></footer>
     </div>
 );}

@@ -95,6 +95,8 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
           {!emailFlows && !update && <p className="account-message">Gmail and password sign-in is available for confirmed accounts. New email registrations and password-reset emails are paused while we prepare email delivery. New here? Continue with Google above.</p>}
           {!update && mode === 'signin' && !remaining && attemptsRemaining !== null && <p role="status">{attemptsRemaining} sign-in attempt{attemptsRemaining === 1 ? '' : 's'} remaining.</p>}{!update && mode === 'signin' && remaining > 0 && <p role="status">Try again in {Math.floor(remaining/60)}:{String(remaining%60).padStart(2,'0')}.</p>}<button className="primary" type="submit" disabled={(!update && mode === 'signin' && remaining > 0) || !update && (!captchaToken || mode !== 'signin' && !emailFlows)}>{busy ? 'Just a moment…' : update ? 'Save new password' : mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}</button>
         </fieldset></form>
+        {/* Signing in or creating an account means accepting the policies, so link them here. */}
+        {!update && mode !== 'reset' && <p className="account-legal">By continuing, you agree to our <a href="#terms">Terms of Service</a> and <a href="#privacy">Privacy Policy</a>.</p>}
         {!update && emailFlows && <button className="text-button" disabled={busy || !captchaToken} onClick={() => void run(async () => {
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('Enter your email address above first.'); return; }
           if (!/^[^\s@]+@gmail\.com$/i.test(email.trim())) { setError('Please use a gmail.com address.'); return; }

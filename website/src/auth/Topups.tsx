@@ -84,6 +84,8 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
     })}>Continue to payment</button></> : open.status === 'pending' ? <p role="status">Your {open.amount_mmk.toLocaleString()} MMK payment for {open.points.toLocaleString()} points is awaiting review. Please don’t transfer again for this request.</p> : <div className="topup-checkout">
       <button className="outline-button" disabled={busy} onClick={() => requestAmountChange(() => setSelecting(true))}>Back to point amount</button><h3>Pay with KBZPay</h3>
       <p>Transfer exactly <strong>{open.amount_mmk.toLocaleString()} MMK</strong> for {open.points.toLocaleString()} points using this QR, then upload your payment receipt below. If you already paid, continue with the receipt only.</p>
+      {/* Shown before paying so buyers know points can't be refunded for cash. */}
+      <p className="topup-refund-note">Points never expire but can’t be refunded for money. See our <a href="#refunds">Refund Policy</a>.</p>
       <div className="checkout-columns"><div><img className="bank-qr" src="/kbzpay-payment.jpg" alt="KBZPay payment QR for Zwe Lin Naing" />
       <a href="/kbzpay-payment.jpg" download="Together-KBZPay.jpg">Save QR image</a>
       <p>Save the image and select it in KBZPay’s scanner. Enter {open.amount_mmk.toLocaleString()} MMK and check the recipient and amount before confirming.</p>
