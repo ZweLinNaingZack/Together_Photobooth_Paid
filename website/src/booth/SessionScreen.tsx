@@ -19,6 +19,9 @@ type CameraChoice = { facing: Facing } | { deviceId: string };
 import {createDuoCaptures} from './duoCaptures.mjs';
 import {diagnosticReport} from './diagnostics.js';
 import {unlockCameraSound,cameraSound} from './cameraSounds.js';
+import { tm, useT, type Key } from '../i18n';
+import { Rich } from '../i18n/Rich';
+import { layoutName, layoutNote } from '../i18n/layouts';
 
 interface Props {
   beforeReview: () => Promise<boolean>;
@@ -38,6 +41,8 @@ interface Props {
 }
 export function SessionScreen(props: Props) {
   const { card, retake, method, seconds } = props, layout = layouts[card.layout];
+  const t = useT();
+  const waitingPermission = t('session.waitingPermission');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [pending, setPending] = useState(false), [busy, setBusy] = useState(false);
   const [devices,setDevices]=useState<MediaDeviceInfo[]>([]);
@@ -115,15 +120,15 @@ export function SessionScreen(props: Props) {
     try {
       if (sync.current?.pending()) {
         // Give slow photos a short moment, then carry on with previews instead of blocking editing.
-        setStatus('Finishing your photos…');
+        setStatus(t('session.finishing'));
         const deadline = Date.now() + 8000;
         while (sync.current?.pending() && Date.now() < deadline && alive.current) await new Promise(resolve => setTimeout(resolve, 250));
         if (!alive.current) return;
         if (sync.current?.pending()) {
           const missing = Array.from({ length: layout.count }, (_, index) => index).filter(index => !card.shots[index] && !pendingPreviews[index]);
-          if (missing.length) { setSyncError(`Photo ${missing[0] + 1} did not come through. Please retake it together.`); return; }
+          if (missing.length) { setSyncError(t('session.missing', { n: missing[0] + 1 })); return; }
           commitPreviews();
-          setStatus('Your person’s full-quality photo is still arriving. It will update automatically while you edit.');
+          setStatus(t('session.stillArriving'));
         }
       }
       if (!await props.beforeReview()) return;
@@ -132,7 +137,7 @@ export function SessionScreen(props: Props) {
       // the creator's paid photos; notify the guest again on reconnection.
       if (duo && peer.connected) { try { await peer.send({ type: 'edit' }); } catch { /* The disconnect dialog handles the lost peer. */ } }
       props.onNext(!!stream);
-    } catch (e) { if (alive.current) setMessage(e instanceof Error ? e.message : 'Please retry.'); }
+    } catch (e) { if (alive.current) setMessage(e instanceof Error ? e.message : t('session.retry')); }
     finally { reviewLock.current = false; if (alive.current) setBusy(false); }
   }
   const locked = busy || remoteBusy || pending || props.interrupted;
@@ -148,7 +153,7 @@ export function SessionScreen(props: Props) {
     if (requesting.current) return;
     requesting.current = true;
     const id = ++requestId.current;
-    setPending(true); setMessage('Waiting for camera permission…');
+    setPending(true); setMessage(waitingPermission);
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('Unavailable');
       const side = choice && 'facing' in choice ? choice.facing : facing;
@@ -159,13 +164,13 @@ export function SessionScreen(props: Props) {
       if (!alive.current || id !== requestId.current) { next.getTracks().forEach(track => track.stop()); return; }
       camera.current = next; setStream(next); setMessage('');
     } catch (error) {
-      if (alive.current && id === requestId.current) setMessage(!window.isSecureContext ? 'Open the HTTPS invitation link to use your camera.' : error instanceof DOMException && error.name === 'NotAllowedError' ? 'Please allow camera access in your browser, then select Turn camera on.' : 'The camera isn’t available. Check that it’s connected and not in use, then try again.');
+      if (alive.current && id === requestId.current) setMessage(t(!window.isSecureContext ? 'session.needHttps' : error instanceof DOMException && error.name === 'NotAllowedError' ? 'session.allowCamera' : 'session.cameraUnavailable'));
     } finally { if (alive.current && id === requestId.current) { requesting.current = false; setPending(false); } }
   }
   function stopCapture() {
     capture.current?.abort(); capture.current = null;
     setFlashLit(false);
-    setBusy(false); setCountdown(null); setStatus('Countdown stopped. Your captured photos are saved.');
+    setBusy(false); setCountdown(null); setStatus(t('session.stopped'));
     if (!guest) share({ type: 'busy', value: false });
   }
   useEffect(() => {
@@ -181,7 +186,7 @@ export function SessionScreen(props: Props) {
   useEffect(() => { if (props.interrupted) stopCapture(); }, [props.interrupted]);
   useEffect(() => { if (duo && !props.room?.bothReady) stopCapture(); }, [duo, props.room?.bothReady]);
   useEffect(() => { share({ type: 'mirror', value: props.mirror }); }, [props.mirror, peer.connected]);
-  useEffect(() => { if (!guest && peer.connected) {void (async()=>{if(sync.current?.pending()){await sync.current.retry();return;}for(const [index,shot] of card.shots.entries())if(shot)await peer.send({type:'shot',index,shot});if(props.visible===false)await peer.send({type:'edit'});})().catch(()=>setStatus('Your earlier photos are safe. Reconnect to finish sharing them.'));} }, [peer.connected]);
+  useEffect(() => { if (!guest && peer.connected) {void (async()=>{if(sync.current?.pending()){await sync.current.retry();return;}for(const [index,shot] of card.shots.entries())if(shot)await peer.send({type:'shot',index,shot});if(props.visible===false)await peer.send({type:'edit'});})().catch(()=>setStatus(t('session.earlierSafe')));} }, [peer.connected]);
   useEffect(() => { share({ type: 'paused', value: props.interrupted }); }, [props.interrupted, peer.connected]);
   useEffect(() => { if (duo && !peer.connected) { stopCapture(); setRemoteBusy(false); setRemoteReady(false); } else if (peer.connected) setRemoteReady((remoteVideo.current?.readyState || 0) >= 2); }, [peer.connected]);
   useEffect(() => { props.onPartnerConnection?.(stream ? peer.connected : null); }, [peer.connected, stream, props.onPartnerConnection]);
@@ -190,7 +195,7 @@ export function SessionScreen(props: Props) {
   useEffect(() => { stream?.getVideoTracks().forEach(track => { track.enabled = props.visible !== false; }); }, [stream, props.visible]);
 
   async function takeShot() {
-    if(!camera.current||!canCapture)throw new Error('Wait for both cameras to be ready.');
+    if(!camera.current||!canCapture)throw new Error(t('session.waitBoth'));
     if(duo){await sync.current!.capture(captureIndex.current);return previewShot();}
     const photo=snapshot(video.current,props.mirror);if(sound)cameraSound('shutter');return photo;
   }
@@ -209,44 +214,44 @@ export function SessionScreen(props: Props) {
       if (duo) await Promise.all([peer.send({ type: 'busy', value: true }),peer.send({ type: 'flashColor', value: props.flashColor })]);
       await captureSequence({ shots: visibleShots, count: layout.count, retake, method, seconds, signal: controller.signal, takeShot,
         onShutter: () => { if(!duo)setShutter(value => value + 1); }, flash: props.flash, onFlash: (lit: boolean) => { if (alive.current && capture.current === controller) { setFlashLit(lit); share({ type: 'flash', value: lit }); } },
-        onShot: async (index: number, shot: string) => { if (!controller.signal.aborted && alive.current){if(duo)sync.current?.preview(index,shot);else props.onShot(index,shot);} }, onCountdown: (value: number | string | null) => { setCountdown(value); share({ type: 'countdown', value }); }, onTaking: (index: number) => {captureIndex.current=index;setStatus(`Taking photo ${index + 1} of ${layout.count}`);} });
-      if (!controller.signal.aborted && alive.current) { props.onRetake(null); setStatus('Photo saved. Reorder, retake, or continue when you’re ready.'); }
+        onShot: async (index: number, shot: string) => { if (!controller.signal.aborted && alive.current){if(duo)sync.current?.preview(index,shot);else props.onShot(index,shot);} }, onCountdown: (value: number | string | null) => { setCountdown(value); share({ type: 'countdown', value }); }, onTaking: (index: number) => {captureIndex.current=index;setStatus(t('session.taking', { n: index + 1, total: layout.count }));} });
+      if (!controller.signal.aborted && alive.current) { props.onRetake(null); setStatus(t('session.saved')); }
     } catch (error) {
-      if (!controller.signal.aborted && alive.current) setMessage(error instanceof Error ? error.message : 'Could not take the photo. Please try again.');
+      if (!controller.signal.aborted && alive.current) setMessage(error instanceof Error ? error.message : t('session.captureFailed'));
     } finally {
       share({ type: 'busy', value: false });
       if (capture.current === controller) { capture.current = null; if (alive.current) { setBusy(false); setCountdown(null); } }
     }
   }
-  const defaultStatus = retake !== null ? `Retaking photo ${retake + 1}. Your other photos will stay exactly as they are.` : complete ? 'All photos are ready. Reorder, retake, or make your card yours.' : method === 'manual' ? 'One click takes one photo, with no countdown.' : `A ${seconds}-second countdown before each remaining photo.`;
-  return <><Heading eyebrow="NOW, YOUR LITTLE MOMENT" title={<>A smile. A silly face. <em>You.</em></>} note={`${layout.name} · ${layout.note}. Your favorite moments, at your own pace.`} />
-    <div className="session-surface"><div className="session-bar"><span>{duo ? 'Together · live cameras' : 'Your live camera'}</span><div className="session-tools"><button className="mirror-toggle" aria-pressed={sound} onClick={()=>{unlockCameraSound();setSound(value=>!value);}}>Sound {sound ? 'On' : 'Off'}</button><button type="button" className={`mirror-toggle ${props.mirror ? 'enabled' : ''}`} aria-pressed={props.mirror} disabled={locked || !stream} onClick={() => props.onMirrorChange(!props.mirror)}>Mirror {props.mirror ? 'On' : 'Off'}</button><button className="text-button" id="camera-toggle" disabled={locked} onClick={()=>void toggleCamera()}>{stream ? 'Turn camera off' : 'Turn camera on'}</button></div></div>
+  const defaultStatus = retake !== null ? t('session.retaking', { n: retake + 1 }) : complete ? t('session.allReady') : method === 'manual' ? t('session.manualHelp') : t('session.timerHelp', { n: seconds });
+  return <><Heading eyebrow={t('session.eyebrow')} title={<Rich text={t('session.title')} />} note={`${layoutName(layout)} · ${layoutNote(layout)}. ${t('session.note')}`} />
+    <div className="session-surface"><div className="session-bar"><span>{t(duo ? 'session.duoBar' : 'session.soloBar')}</span><div className="session-tools"><button className="mirror-toggle" aria-pressed={sound} onClick={()=>{unlockCameraSound();setSound(value=>!value);}}>{t('session.sound', { state: t(sound ? 'common.on' : 'common.off') })}</button><button type="button" className={`mirror-toggle ${props.mirror ? 'enabled' : ''}`} aria-pressed={props.mirror} disabled={locked || !stream} onClick={() => props.onMirrorChange(!props.mirror)}>{t('session.mirror', { state: t(props.mirror ? 'common.on' : 'common.off') })}</button><button className="text-button" id="camera-toggle" disabled={locked} onClick={()=>void toggleCamera()}>{t(stream ? 'session.cameraOff' : 'session.cameraOn')}</button></div></div>
       <div style={{aspectRatio:String(photoRatio),maxHeight:'none',maxWidth:`min(100%, ${photoRatio*55}svh)`,marginInline:'auto'}} className={`session-view ${duo ? 'duo-live-view' : 'solo-live-view'}`} ref={view}>
-        <div className="camera-pane" style={{ order: guest ? 1 : 0 }}><video ref={video} id="live-camera" aria-label="Your live camera" className={props.mirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setVideoReady(true)} onEmptied={() => setVideoReady(false)} hidden={!stream} />{(!stream || !videoReady) && <div className="camera-placeholder"><span aria-hidden="true">◎</span><strong>{pending ? 'Opening your camera…' : 'Your camera is off'}</strong><p>{pending ? 'Allow camera access to join the moment.' : 'Turn your camera on to take your photos.'}</p></div>}<span className="camera-name">You</span></div>
-        {duo && <div className="camera-pane" style={{ order: guest ? 0 : 1 }}><video ref={remoteVideo} aria-label="Your person’s live camera" className={remoteMirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setRemoteReady(true)} onEmptied={() => setRemoteReady(false)} hidden={!peer.remote} />{(!peer.remote || !peer.connected || !remoteReady) && <div className="camera-placeholder"><span aria-hidden="true">♡</span><strong>Waiting for your person…</strong><p>Both of you need to enter this page and allow camera access.</p></div>}<span className="camera-name">Your person</span></div>}
+        <div className="camera-pane" style={{ order: guest ? 1 : 0 }}><video ref={video} id="live-camera" aria-label={t('session.soloBar')} className={props.mirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setVideoReady(true)} onEmptied={() => setVideoReady(false)} hidden={!stream} />{(!stream || !videoReady) && <div className="camera-placeholder"><span aria-hidden="true">◎</span><strong>{t(pending ? 'session.opening' : 'session.isOff')}</strong><p>{t(pending ? 'session.allowToJoin' : 'session.turnOn')}</p></div>}<span className="camera-name">{t('room.you')}</span></div>
+        {duo && <div className="camera-pane" style={{ order: guest ? 0 : 1 }}><video ref={remoteVideo} aria-label={t('session.partnerCamera')} className={remoteMirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setRemoteReady(true)} onEmptied={() => setRemoteReady(false)} hidden={!peer.remote} />{(!peer.remote || !peer.connected || !remoteReady) && <div className="camera-placeholder"><span aria-hidden="true">♡</span><strong>{t('session.waitingPerson')}</strong><p>{t('session.bothEnter')}</p></div>}<span className="camera-name">{t('room.yourPerson')}</span></div>}
         {shutter > 0 && <div key={shutter} className="shutter-flash" aria-hidden="true" />}
         <div id="shot-countdown" hidden={countdown === null} aria-live="assertive">{countdown}</div>
       </div>
-      <div className="capture-near-preview" hidden={guest}><button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? `Retake photo ${retake + 1}` : method === 'manual' ? 'Take a photo' : ready ? 'Continue countdown' : 'Start the countdown'} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>Stop countdown</button></div>
+      <div className="capture-near-preview" hidden={guest}><button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? t('session.retakeN', { n: retake + 1 }) : method === 'manual' ? t('session.takeOne') : ready ? t('session.continueCountdown') : t('session.startCountdown')} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>{t('session.stopCountdown')}</button></div>
       <ScreenFlash active={flashLit} color={props.flashColor} view={view} />
-      <p id="camera-message" className="session-note" role="status">{message && message !== 'Waiting for camera permission…' ? '' : message || (duo ? peer.connected ? 'Both cameras are connected. The creator takes each photo and shares it with both of you.' : `${peer.phase}. Your microphone stays off.` : 'Your photos stay in this browser tab.')}</p>
-      <WarningNotice>{message !== 'Waiting for camera permission…' ? message : ''}</WarningNotice>
-      {duo && peer.error && <WarningNotice title="Camera connection"><p>{peer.error}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>Reconnect cameras</button></WarningNotice>}
-      {duo && peer.diagnostics && <details className="connection-details"><summary>Connection details</summary><p>These details help troubleshoot the connection. They contain no photos or invitation codes.</p><pre>{peer.diagnostics}</pre><button className="text-button" onClick={async()=>{try{await navigator.clipboard.writeText(peer.diagnostics+"\n"+diagnosticReport());setStatus("Support details copied. No photos or account details included.");}catch{setStatus("Select the connection details above to copy them.");}}}>Copy support details</button></details>}
-      {guest && <p className="session-note">Your creator controls the countdown, retakes, and photo order. Each shared photo appears below.</p>}
-      <details className="camera-settings"><summary>Camera settings</summary>{phoneCameras
-        ? <fieldset className="camera-facing" disabled={locked}><legend>Camera</legend>{(['user','environment'] as const).map(side => <label key={side}><input type="radio" name="camera-facing" value={side} checked={facing === side} onChange={() => { setFacing(side); props.onMirrorChange(side === 'user'); stopCamera(); void toggleCamera({ facing: side }); }} /> {side === 'user' ? 'Front camera' : 'Back camera'}</label>)}</fieldset>
-        : devices.length>1&&<label className="camera-device">Camera <select disabled={locked} value={stream?.getVideoTracks()[0]?.getSettings().deviceId||''} onChange={e=>{stopCamera();void toggleCamera({deviceId:e.target.value});}}>{devices.map((device,i)=><option key={device.deviceId} value={device.deviceId}>{device.label||`Camera ${i+1}`}</option>)}</select></label>}<div className="capture-settings" hidden={guest}><fieldset disabled={locked}><legend>HOW SHALL WE TAKE THEM?</legend>{(['timer', 'manual'] as const).map(value => <label key={value}><input type="radio" name="capture-method" value={value} checked={method === value} onChange={() => { props.onMethod(value); setStatus(''); }} /> {value === 'timer' ? 'With a timer' : 'Manual click'}</label>)}</fieldset><label className="timer-setting" hidden={method === 'manual'}>COUNTDOWN<select id="timer-seconds" value={seconds} disabled={locked} onChange={e => { props.onSeconds(Number(e.target.value)); setStatus(''); }}>{[3, 5, 7].map(value => <option key={value} value={value}>{value} seconds</option>)}</select></label></div>
+      <p id="camera-message" className="session-note" role="status">{message && message !== waitingPermission ? '' : message || (duo ? peer.connected ? t('session.bothConnected') : t('session.phase', { phase: tm(peer.phase) }) : t('session.staysHere'))}</p>
+      <WarningNotice>{message !== waitingPermission ? message : ''}</WarningNotice>
+      {duo && peer.error && <WarningNotice title={t('session.connectionTitle')}><p>{tm(peer.error)}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>{t('session.reconnect')}</button></WarningNotice>}
+      {duo && peer.diagnostics && <details className="connection-details"><summary>{t('session.details')}</summary><p>{t('session.detailsHelp')}</p><pre>{peer.diagnostics}</pre><button className="text-button" onClick={async()=>{try{await navigator.clipboard.writeText(peer.diagnostics+"\n"+diagnosticReport());setStatus(t('session.detailsCopied'));}catch{setStatus(t('session.detailsManual'));}}}>{t('session.copyDetails')}</button></details>}
+      {guest && <p className="session-note">{t('session.guestNote')}</p>}
+      <details className="camera-settings"><summary>{t('session.settings')}</summary>{phoneCameras
+        ? <fieldset className="camera-facing" disabled={locked}><legend>{t('session.camera')}</legend>{(['user','environment'] as const).map(side => <label key={side}><input type="radio" name="camera-facing" value={side} checked={facing === side} onChange={() => { setFacing(side); props.onMirrorChange(side === 'user'); stopCamera(); void toggleCamera({ facing: side }); }} /> {t(side === 'user' ? 'session.front' : 'session.back')}</label>)}</fieldset>
+        : devices.length>1&&<label className="camera-device">{t('session.camera')} <select disabled={locked} value={stream?.getVideoTracks()[0]?.getSettings().deviceId||''} onChange={e=>{stopCamera();void toggleCamera({deviceId:e.target.value});}}>{devices.map((device,i)=><option key={device.deviceId} value={device.deviceId}>{device.label||t('session.cameraN', { n: i + 1 })}</option>)}</select></label>}<div className="capture-settings" hidden={guest}><fieldset disabled={locked}><legend>{t('session.how')}</legend>{(['timer', 'manual'] as const).map(value => <label key={value}><input type="radio" name="capture-method" value={value} checked={method === value} onChange={() => { props.onMethod(value); setStatus(''); }} /> {t(value === 'timer' ? 'session.withTimer' : 'session.manual')}</label>)}</fieldset><label className="timer-setting" hidden={method === 'manual'}>{t('session.countdown')}<select id="timer-seconds" value={seconds} disabled={locked} onChange={e => { props.onSeconds(Number(e.target.value)); setStatus(''); }}>{[3, 5, 7].map(value => <option key={value} value={value}>{t('session.seconds', { n: value })}</option>)}</select></label></div>
       <div className="flash-settings" hidden={guest}>
-        <div className="flash-setting-heading"><div><strong>Screen flash</strong><p>A little light for your moment.</p></div><button type="button" className={`flash-toggle ${props.flash ? 'enabled' : ''}`} aria-pressed={props.flash} disabled={locked} onClick={() => props.onFlashChange(!props.flash)}>Flash {props.flash ? 'On' : 'Off'}</button></div>
-        {props.flash && <fieldset className="flash-colors" disabled={locked}><legend>FLASH COLOR</legend>{Object.entries(flashColors).map(([key, value]) => <label key={key}><input type="radio" name="flash-color" value={key} checked={props.flashColor === key} onChange={() => props.onFlashColor(key as FlashColor)} /><span className="flash-color-dot" style={{ background: value.color }} aria-hidden="true" />{value.label}</label>)}</fieldset>}
-        {props.flash && <p className="flash-note">Your screen lights up just before each photo. Keep your screen bright and your face close for more light.</p>}
+        <div className="flash-setting-heading"><div><strong>{t('session.flash')}</strong><p>{t('session.flashHelp')}</p></div><button type="button" className={`flash-toggle ${props.flash ? 'enabled' : ''}`} aria-pressed={props.flash} disabled={locked} onClick={() => props.onFlashChange(!props.flash)}>{t('session.flashState', { state: t(props.flash ? 'common.on' : 'common.off') })}</button></div>
+        {props.flash && <fieldset className="flash-colors" disabled={locked}><legend>{t('session.flashColor')}</legend>{Object.entries(flashColors).map(([key, value]) => <label key={key}><input type="radio" name="flash-color" value={key} checked={props.flashColor === key} onChange={() => props.onFlashColor(key as FlashColor)} /><span className="flash-color-dot" style={{ background: value.color }} aria-hidden="true" />{t(`flashColor.${key}` as Key)}</label>)}</fieldset>}
+        {props.flash && <p className="flash-note">{t('session.flashNote')}</p>}
       </div>
-      <p className="session-note">Keep your face inside the preview. Adjust the crop when editing.</p></details><p id="session-status" aria-live="polite">{guest ? remoteBusy ? 'Your creator is taking your shared photos…' : complete ? 'Your photos are ready. Your creator can take you both to export.' : 'Ready when your creator is.' : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
-<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{duo ? 'Leave session' : 'Change layout'}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>Cancel retake</button>}<button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null} onClick={review}>Continue to editing</button></div>
+      <p className="session-note">{t('session.faceInside')}</p></details><p id="session-status" aria-live="polite">{guest ? t(remoteBusy ? 'session.guestTaking' : complete ? 'session.guestReady' : 'session.guestWaiting') : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
+<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{t(duo ? 'session.leave' : 'upload.changeLayout')}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>{t('session.cancelRetake')}</button>}<button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null} onClick={review}>{t('session.toEditing')}</button></div>
       {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={previewShot} retake={retake} />}
-      {duo&&syncCount>0&&<p className="session-note" role="status">Finishing {syncCount} high-quality photo{syncCount===1?'':'s'} in the background. You can keep going; they will update by themselves.</p>}
-      <WarningNotice title="Photo sync">{syncError&&<><p>{syncError}</p><button className="outline-button" disabled={!peer.connected} onClick={()=>{setSyncError('');void sync.current?.retry();}}>Retry photo sync</button>{!guest&&<button className="text-button" disabled={!peer.connected||busy} onClick={()=>{props.onRetake(sync.current?.pendingIndex()??null);setSyncError('');}}>Retake unsynced photo</button>}</>}</WarningNotice>
+      {duo&&syncCount>0&&<p className="session-note" role="status">{t(syncCount === 1 ? 'session.syncingOne' : 'session.syncing', { n: syncCount })}</p>}
+      <WarningNotice title={t('session.syncTitle')}>{syncError&&<><p>{tm(syncError)}</p><button className="outline-button" disabled={!peer.connected} onClick={()=>{setSyncError('');void sync.current?.retry();}}>{t('session.retrySync')}</button>{!guest&&<button className="text-button" disabled={!peer.connected||busy} onClick={()=>{props.onRetake(sync.current?.pendingIndex()??null);setSyncError('');}}>{t('session.retakeUnsynced')}</button>}</>}</WarningNotice>
       <PhotoTray shots={visibleShots} count={layout.count} retake={retake} disabled={locked || syncCount>0 || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
     </div>
   </>;

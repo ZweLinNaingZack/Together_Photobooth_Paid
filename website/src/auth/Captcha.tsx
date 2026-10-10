@@ -1,5 +1,6 @@
 import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n';
 type Turnstile = { render: (el: HTMLElement, options: Record<string, unknown>) => string; remove: (id: string) => void };
 declare global { interface Window { turnstile?: Turnstile } }
 let loader: Promise<void> | undefined;
@@ -19,6 +20,7 @@ export function Captcha({ onToken }: { onToken: (token: string) => void }) {
   const element = useRef<HTMLDivElement>(null), callback = useRef(onToken);
   callback.current = onToken;
   const [error, setError] = useState(false), [attempt, setAttempt] = useState(0);
+  const t = useT();
   useEffect(() => {
     let cancelled = false, widget: string | undefined;
     setError(false); callback.current('');
@@ -28,5 +30,5 @@ export function Captcha({ onToken }: { onToken: (token: string) => void }) {
     }).catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; if (widget) window.turnstile?.remove(widget); };
   }, [attempt]);
-  return <div className="account-captcha"><div ref={element} />{!captchaKey ? <p role="status">Password sign-in verification is being configured. Please use Google for now.</p> : error && <WarningNotice>Verification could not load. <button type="button" className="text-button" onClick={() => setAttempt(n => n+1)}>Retry verification</button></WarningNotice>}</div>;
+  return <div className="account-captcha"><div ref={element} />{!captchaKey ? <p role="status">{t('captcha.notSetUp')}</p> : error && <WarningNotice>{t('captcha.failed')} <button type="button" className="text-button" onClick={() => setAttempt(n => n+1)}>{t('captcha.retry')}</button></WarningNotice>}</div>;
 }

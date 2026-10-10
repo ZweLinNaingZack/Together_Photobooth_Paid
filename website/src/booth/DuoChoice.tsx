@@ -1,5 +1,12 @@
 import { Heading } from './shared';
+import { useT } from '../i18n';
+import { Rich } from '../i18n/Rich';
+
 export function DuoChoice({ onCreate, onJoin, onBack }: { onCreate: () => void; onJoin: () => void; onBack: () => void }) {
-  return <><Heading eyebrow="A BOOTH FOR TWO" title={<>Meet your person <em>here.</em></>} note="Start a new booth, or join the one your person has made." />
-    <div className="source-options"><button className="source-option" onClick={onCreate}><span className="eyebrow">MAKE THE INVITATION</span><strong>Create a booth</strong><p>Choose your layout first. Then get an invitation link and a party code to share.</p><span className="source-action">Create our booth</span></button><button className="source-option" onClick={onJoin}><span className="eyebrow">YOUR PERSON IS WAITING</span><strong>Join a booth</strong><p>Have a party code? Enter it to join your person with their layout already chosen. Choose frames after your photos.</p><span className="source-action">Enter a party code</span></button></div><div className="step-actions"><button className="text-button" onClick={onBack}>Change photo source</button></div></>;
+  const t = useT();
+  return <><Heading eyebrow={t('duo.eyebrow')} title={<Rich text={t('duo.title')} />} note={t('duo.note')} />
+    <div className="source-options">
+      <button className="source-option" onClick={onCreate}><span className="eyebrow">{t('duo.create.eyebrow')}</span><strong>{t('duo.create.title')}</strong><p>{t('duo.create.text')}</p><span className="source-action">{t('duo.create.action')}</span></button>
+      <button className="source-option" onClick={onJoin}><span className="eyebrow">{t('duo.join.eyebrow')}</span><strong>{t('duo.join.title')}</strong><p>{t('duo.join.text')}</p><span className="source-action">{t('duo.join.action')}</span></button>
+    </div><div className="step-actions"><button className="text-button" onClick={onBack}>{t('duo.back')}</button></div></>;
 }

@@ -3,14 +3,16 @@ import { useStepHistory } from '../components/useStepHistory';
 import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from './client';
+import { formatDateTime, num, t, useT } from '../i18n';
+import { Rich } from '../i18n/Rich';
 
 type Request = { id: string; user_id: string; points: number; amount_mmk: number; status: 'draft' | 'pending' | 'approved' | 'rejected'; created_at: string; review_note: string | null; payment_reference?: string; customer_name?: string; customer_email?: string };
 const receiptPath = (r: Request) => `${r.user_id}/${r.id}/receipt`;
 function failure(error: { code?: string }) {
   if (error.code === 'PGRST202') return 'The order dashboard needs its database update. Please run the latest payment migration (011) and refresh.';
-  if (error.code === '23505') return 'This bank transaction has already been credited. Please check the reference.';
-  if (error.code === 'P0001') return 'The request could not be completed. Check its status and details, or try again later.';
-  return 'We couldn’t complete that request. Refresh the payment history before retrying.';
+  if (error.code === '23505') return t('topup.error.duplicate');
+  if (error.code === 'P0001') return t('topup.error.failed');
+  return t('topup.error.generic');
 }
 export function Topups({ userId, admin, onCredit }: { userId: string; admin: boolean; onCredit: () => void }) {
   const [requests, setRequests] = useState<Request[]>([]), [queue, setQueue] = useState<Request[]>([]);
@@ -24,6 +26,7 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
   const [changeAmount, setChangeAmount] = useState<(() => void) | null>(null);
   const [decision,setDecision] = useState<'approve' | 'reject' | null>(null);
   const lock = useRef(false);
+  useT();   // redraw when the language changes
   async function refresh() {
     if (!admin) {
     const own = await supabase!.from('together_topups').select('id,user_id,points,amount_mmk,payment_reference,status,created_at,review_note').eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
@@ -73,43 +76,43 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
   }
   return <div className="topups">
     <BoothDialog open={!!decision} title={decision === 'approve' ? 'Approve this payment?' : 'Reject this payment?'} cancelLabel="Cancel" confirmLabel={decision === 'approve' ? 'Approve & credit points' : 'Confirm rejection'} busy={busy} error={error} onCancel={()=>{setDecision(null);setError('');}} onConfirm={()=>void resolveReview()}><p>{decision === 'approve' ? 'Confirm that the correct transfer was received. Points will be credited once and a confirmation email will be queued.' : 'No points will be credited. The customer will receive an email with your review note, if provided.'}</p></BoothDialog>
-    <BoothDialog open={!!changeAmount} title="Change point amount?" cancelLabel="Keep this payment" confirmLabel="I haven’t paid — change amount" onCancel={() => setChangeAmount(null)} onConfirm={() => { const proceed=changeAmount; setChangeAmount(null); proceed?.(); }}><p>Only change the amount if you haven’t transferred the money yet. If you already paid, keep this order and submit your receipt.</p></BoothDialog>
+    <BoothDialog open={!!changeAmount} title={t('topup.change.title')} cancelLabel={t('topup.change.keep')} confirmLabel={t('topup.change.confirm')} onCancel={() => setChangeAmount(null)} onConfirm={() => { const proceed=changeAmount; setChangeAmount(null); proceed?.(); }}><p>{t('topup.change.text')}</p></BoothDialog>
     {!admin && <div className="purchase-grid"><section className="dashboard-card purchase-card">
-    <h3>Keep making memories</h3>
-    <p>7,000 MMK buys 100 points — enough for 1 session.</p>
-    <p className="topup-notice">Payments are reviewed by a person. Points arrive after approval, which may take until the next day. You can close this page and return to My account to check.</p>
-    {!ready ? <p>Payment requests aren’t available yet.</p> : !open || selecting ? <><div className="point-picker"><span className="eyebrow">CHOOSE YOUR POINTS</span><div className="point-stepper"><button type="button" className="outline-button" disabled={busy || points === 100} onClick={() => setPoints(p => Math.max(100, p - 100))}>− 100</button><output aria-live="polite"><strong>{points.toLocaleString()}</strong> points</output><button type="button" className="outline-button" disabled={busy || points >= 10000} onClick={() => setPoints(p => Math.min(10000, p + 100))}>+ 100</button></div><p aria-live="polite"><strong>{(points / 100 * 7000).toLocaleString()} MMK</strong> · {points / 100} {points === 100 ? 'session' : 'sessions'}</p></div><button className="primary" disabled={busy} onClick={() => void run(async () => {
+    <h3>{t('topup.title')}</h3>
+    <p>{t('topup.price')}</p>
+    <p className="topup-notice">{t('topup.notice')}</p>
+    {!ready ? <p>{t('topup.unavailable')}</p> : !open || selecting ? <><div className="point-picker"><span className="eyebrow">{t('topup.choose')}</span><div className="point-stepper"><button type="button" className="outline-button" disabled={busy || points === 100} onClick={() => setPoints(p => Math.max(100, p - 100))}>− 100</button><output aria-live="polite"><strong>{num(points)}</strong> {t('wallet.points')}</output><button type="button" className="outline-button" disabled={busy || points >= 10000} onClick={() => setPoints(p => Math.min(10000, p + 100))}>+ 100</button></div><p aria-live="polite"><strong>{num(points / 100 * 7000)} MMK</strong> · {t(points === 100 ? 'topup.session' : 'topup.sessions', { n: points / 100 })}</p></div><button className="primary" disabled={busy} onClick={() => void run(async () => {
       const { error } = await supabase!.rpc(open ? 'together_change_topup' : 'together_start_topup', open ? { request_id: open.id, requested_points: points } : { requested_points: points }); if (error) throw error;
       setFile(null); await refresh(); setSelecting(false);
-    })}>Continue to payment</button></> : open.status === 'pending' ? <p role="status">Your {open.amount_mmk.toLocaleString()} MMK payment for {open.points.toLocaleString()} points is awaiting review. Please don’t transfer again for this request.</p> : <div className="topup-checkout">
-      <button className="outline-button" disabled={busy} onClick={() => requestAmountChange(() => setSelecting(true))}>Back to point amount</button><h3>Pay with KBZPay</h3>
-      <p>Transfer exactly <strong>{open.amount_mmk.toLocaleString()} MMK</strong> for {open.points.toLocaleString()} points using this QR, then upload your payment receipt below. If you already paid, continue with the receipt only.</p>
+    })}>{t('topup.continue')}</button></> : open.status === 'pending' ? <p role="status">{t('topup.pending', { amount: num(open.amount_mmk), points: num(open.points) })}</p> : <div className="topup-checkout">
+      <button className="outline-button" disabled={busy} onClick={() => requestAmountChange(() => setSelecting(true))}>{t('topup.backToAmount')}</button><h3>{t('topup.payWith')}</h3>
+      <p><Rich text={t('topup.transfer', { amount: num(open.amount_mmk), points: num(open.points) })} /></p>
       {/* Shown before paying so buyers know points can't be refunded for cash. */}
-      <p className="topup-refund-note">Points never expire but can’t be refunded for money. See our <a href="#refunds">Refund Policy</a>.</p>
-      <div className="checkout-columns"><div><img className="bank-qr" src="/kbzpay-payment.jpg" alt="KBZPay payment QR for Zwe Lin Naing" />
-      <a href="/kbzpay-payment.jpg" download="Together-KBZPay.jpg">Save QR image</a>
-      <p>Save the image and select it in KBZPay’s scanner. Enter {open.amount_mmk.toLocaleString()} MMK and check the recipient and amount before confirming.</p>
-      </div><div className="receipt-upload"><label>Transaction ID / payment reference (optional with a receipt)<input value={paymentReference} maxLength={100} disabled={busy} onChange={e => setPaymentReference(e.target.value)} /></label><label>Payment receipt<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} /></label>
-      <small>JPG, PNG or WebP, up to 5 MB. Receipts are visible only to you and the administrator. Once uploaded, a receipt cannot be replaced.</small>
+      <p className="topup-refund-note"><Rich text={t('topup.refundNote')} /></p>
+      <div className="checkout-columns"><div><img className="bank-qr" src="/kbzpay-payment.jpg" alt={t('topup.qrAlt')} />
+      <a href="/kbzpay-payment.jpg" download="Together-KBZPay.jpg">{t('topup.saveQr')}</a>
+      <p>{t('topup.qrHelp', { amount: num(open.amount_mmk) })}</p>
+      </div><div className="receipt-upload"><label>{t('topup.reference')}<input value={paymentReference} maxLength={100} disabled={busy} onChange={e => setPaymentReference(e.target.value)} /></label><label>{t('topup.receipt')}<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => setFile(e.target.files?.[0] || null)} /></label>
+      <small>{t('topup.receiptHelp')}</small>
       <button className="primary" disabled={busy} onClick={() => void run(async () => {
         if (file) {
-          if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5242880 || file.size === 0) { setError('Choose a JPG, PNG or WebP receipt up to 5 MB.'); return; }
+          if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5242880 || file.size === 0) { setError(t('topup.receiptType')); return; }
           const { error } = await supabase!.storage.from('together-receipts').upload(receiptPath(open), file, { contentType: file.type, upsert: false });
-          if (error) { setError('Upload was not completed, or a receipt is already saved. If you uploaded earlier, use “Submit saved receipt” below.'); return; }
+          if (error) { setError(t('topup.uploadFailed')); return; }
           setFile(null);
         }
         const { error } = await supabase!.rpc('together_submit_topup', { request_id: open.id, payment_reference: paymentReference.trim() || null }); if (error) throw error;
         await refresh();
-      })}>{busy ? 'Please wait…' : file ? 'Upload and submit receipt' : paymentReference.trim() ? 'Submit payment reference' : 'Submit saved receipt'}</button></div></div>
+      })}>{busy ? t('topup.wait') : file ? t('topup.submitFile') : paymentReference.trim() ? t('topup.submitReference') : t('topup.submitSaved')}</button></div></div>
     </div>}
-    </section><section className="dashboard-card purchase-history"><h3>Your payment requests</h3>
-    <button className="text-button" disabled={busy} onClick={() => void run(refresh)}>Refresh payment status</button>
-    {requests.length === 0 && ready && <p>No payment requests yet.</p>}
+    </section><section className="dashboard-card purchase-history"><h3>{t('topup.history')}</h3>
+    <button className="text-button" disabled={busy} onClick={() => void run(refresh)}>{t('topup.refresh')}</button>
+    {requests.length === 0 && ready && <p>{t('topup.none')}</p>}
     <ul className="payment-list">{requests.map(r => <li key={r.id}>
-      <strong>{r.amount_mmk.toLocaleString()} MMK · {r.points.toLocaleString()} points · {r.status === 'draft' ? 'Awaiting receipt' : r.status === 'pending' ? 'Pending review' : r.status === 'approved' ? `Approved · ${r.points.toLocaleString()} points added` : 'Not approved'}</strong>
-      <small>{new Date(r.created_at).toLocaleString()} · Request {r.id.slice(0,8)}</small>
+      <strong>{num(r.amount_mmk)} MMK · {num(r.points)} {t('wallet.points')} · {r.status === 'draft' ? t('topup.status.draft') : r.status === 'pending' ? t('topup.status.pending') : r.status === 'approved' ? t('topup.status.approved', { points: num(r.points) }) : t('topup.status.rejected')}</strong>
+      <small>{formatDateTime(r.created_at)} · {t('topup.request', { id: r.id.slice(0,8) })}</small>
       {r.review_note && <p>{r.review_note}</p>}
-      <button className="text-button" disabled={busy} onClick={() => void run(() => view(r))}>View saved receipt</button>
+      <button className="text-button" disabled={busy} onClick={() => void run(() => view(r))}>{t('topup.viewReceipt')}</button>
     </li>)}</ul>
     </section></div>}
     {admin && <section className="admin-payments"><div className="section-heading"><div><h2>{queue.filter(r => r.status === 'pending').length} awaiting review</h2><p>Check the incoming payment in KBZPay before approving.</p></div><button className="outline-button" disabled={busy} onClick={() => void run(refresh)}>Refresh orders</button></div>
@@ -132,7 +135,7 @@ export function Topups({ userId, admin, onCredit }: { userId: string; admin: boo
           </div> : <p>{r.review_note || 'This order has already been reviewed.'}</p>}
       </div>)}</div></div>}
     </section>}
-    {receipt && receipt.id !== review && <div className="receipt-view"><h3>Receipt · {receipt.id.slice(0,8)}</h3><img src={receipt.url} alt="Uploaded payment receipt" /><button className="text-button" onClick={() => setReceipt(null)}>Close receipt</button><small>This preview expires after five minutes. Open it again to refresh.</small></div>}
+    {receipt && receipt.id !== review && <div className="receipt-view"><h3>{t('topup.receiptTitle', { id: receipt.id.slice(0,8) })}</h3><img src={receipt.url} alt={t('topup.receiptAlt')} /><button className="text-button" onClick={() => setReceipt(null)}>{t('topup.closeReceipt')}</button><small>{t('topup.receiptExpires')}</small></div>}
     {error && !decision && <WarningNotice>{error}</WarningNotice>}
   </div>;
 }

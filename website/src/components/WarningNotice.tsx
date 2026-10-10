@@ -1,8 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { tm, useT } from '../i18n';
 
 /** Acknowledged errors stay dismissed until the message changes or clears. */
-export function WarningNotice({ children, title = 'A little attention needed' }: { children: ReactNode; title?: string }) {
+export function WarningNotice({ children, title }: { children: ReactNode; title?: string }) {
+  const t = useT();
+  // Plain text messages (often from the server or helper files) are shown in the current language when we know them.
+  const content = typeof children === 'string' ? tm(children) : children;
   const ref = useRef<HTMLDialogElement>(null), body = useRef<HTMLDivElement>(null);
   const [dismissed, setDismissed] = useState('');
   const id = useId();
@@ -29,8 +33,8 @@ export function WarningNotice({ children, title = 'A little attention needed' }:
   }, [children, dismissed]);
   function dismiss() { setDismissed(body.current?.textContent?.trim() || ''); ref.current?.close(); }
   return <dialog ref={ref} className="leave-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-body`} onCancel={e => { e.preventDefault(); dismiss(); }}>
-    <div className="leave-emblem" aria-hidden="true">♡</div><h2 id={`${id}-title`}>{title}</h2>
-    <div ref={body} id={`${id}-body`} className="booth-dialog-copy">{children}</div>
-    <div className="leave-actions"><button type="button" className="primary" onClick={dismiss}>Got it</button></div>
+    <div className="leave-emblem" aria-hidden="true">♡</div><h2 id={`${id}-title`}>{title ?? t('common.attention')}</h2>
+    <div ref={body} id={`${id}-body`} className="booth-dialog-copy">{content}</div>
+    <div className="leave-actions"><button type="button" className="primary" onClick={dismiss}>{t('common.gotIt')}</button></div>
   </dialog>;
 }

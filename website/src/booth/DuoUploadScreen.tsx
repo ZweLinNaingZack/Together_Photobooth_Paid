@@ -6,6 +6,8 @@ import { PhotoTray } from './PhotoTray';
 import { Heading } from './shared';
 import { renderCard } from './renderCard';
 import type { CardState } from './types';
+import { useT } from '../i18n';
+import { Rich } from '../i18n/Rich';
 
 // Each layout opening gets one left/right pair, just like a live Duo capture.
 async function pairPhotos(photos: string[], count: number) {
@@ -34,6 +36,7 @@ export function DuoUploadScreen({ card, photos, onPhotos, onBack, onNext }: {
   const [preview, setPreview] = useState(''), [pairs, setPairs] = useState<string[]>([]);
   const [error, setError] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
+  const t = useT();
   useEffect(() => {
     if (stage === 'left' && !dialog.current?.open) dialog.current?.showModal();
     if (stage !== 'left') dialog.current?.close();
@@ -46,7 +49,7 @@ export function DuoUploadScreen({ card, photos, onPhotos, onBack, onNext }: {
         const shots = await pairPhotos(photos, count);
         const canvas = await renderCard({ ...card, shots });
         if (!cancelled) { setPairs(shots); setPreview(canvas.toDataURL('image/png')); }
-      } catch { if (!cancelled) setError('Could not prepare your card. Please replace the affected photos.'); }
+      } catch { if (!cancelled) setError(t('duoUpload.prepareFailed')); }
     })();
     return () => { cancelled = true; };
   }, [photos, card, count, stage, full]);
@@ -58,8 +61,8 @@ export function DuoUploadScreen({ card, photos, onPhotos, onBack, onNext }: {
   }
   function upload(side: 'right' | 'left') {
     const shots = photos.slice(side === 'right' ? 0 : count, side === 'right' ? count : count * 2);
-    return <><p className="duo-side-label">{side === 'right' ? '1 · Right side' : '2 · Left side'} — choose {count} photos</p>
-      <UploadScreen key={side} card={{ ...card, shots }} replacement={null} nextLabel={side === 'right' ? 'Continue to left-side photos' : 'Preview both sides'}
+    return <><p className="duo-side-label">{t(side === 'right' ? 'duoUpload.rightStep' : 'duoUpload.leftStep', { n: count })}</p>
+      <UploadScreen key={side} card={{ ...card, shots }} replacement={null} nextLabel={t(side === 'right' ? 'duoUpload.toLeft' : 'duoUpload.preview')}
         onPhotos={next => updateSide(side, next)} onMove={(from, to) => updateSide(side, move(shots, from, to))}
         onBack={side === 'right' ? onBack : () => setStage('right')}
         onNext={() => setStage(side === 'right' ? 'left' : 'review')} />
@@ -67,21 +70,21 @@ export function DuoUploadScreen({ card, photos, onPhotos, onBack, onNext }: {
   }
   return <>
     {stage === 'right' && upload('right')}
-    <dialog ref={dialog} className="duo-upload-dialog" aria-label="Upload left-side photos" onCancel={event => { event.preventDefault(); setStage('right'); }}>
+    <dialog ref={dialog} className="duo-upload-dialog" aria-label={t('duoUpload.leftLabel')} onCancel={event => { event.preventDefault(); setStage('right'); }}>
       {stage === 'left' && upload('left')}
     </dialog>
     {stage === 'review' && <>
-      <Heading eyebrow="BOTH SIDES, ONE KEEPSAKE" title={<>Your photos. <em>Together.</em></>} note={`${count * 2} photos in ${count} side-by-side pairs. Drag photos within either side to change their order.`} />
+      <Heading eyebrow={t('duoUpload.eyebrow')} title={<Rich text={t('duoUpload.title')} />} note={t('duoUpload.note', { total: count * 2, n: count })} />
       <div className="upload-surface">
-        {preview ? <img className="duo-upload-preview" src={preview} alt="Your combined Duo photocard" /> : <p role="status">{error ? 'Preview unavailable. Replace your photos to retry.' : 'Preparing your photocard…'}</p>}
+        {preview ? <img className="duo-upload-preview" src={preview} alt={t('duoUpload.alt')} /> : <p role="status">{error ? t('duoUpload.previewFailed') : t('edit.preparingCard')}</p>}
         <WarningNotice>{error}</WarningNotice>
         {(['right', 'left'] as const).map(side => {
           const offset = side === 'right' ? 0 : count;
-          return <section key={side} aria-label={`${side} photos`}><h2>{side === 'right' ? 'Right side' : 'Left side'}</h2>
-            <PhotoTray shots={photos.slice(offset, offset + count)} count={count} retake={null} actionLabel="Replace" onMove={(from, to) => updateSide(side, move(photos.slice(offset, offset + count), from, to))} onRetake={() => setStage(side)} />
+          return <section key={side} aria-label={t(side === 'right' ? 'duoUpload.right' : 'duoUpload.left')}><h2>{t(side === 'right' ? 'duoUpload.right' : 'duoUpload.left')}</h2>
+            <PhotoTray shots={photos.slice(offset, offset + count)} count={count} retake={null} actionLabel={t('tray.replace')} onMove={(from, to) => updateSide(side, move(photos.slice(offset, offset + count), from, to))} onRetake={() => setStage(side)} />
           </section>;
         })}
-        <div className="step-actions"><button className="text-button" onClick={onBack}>Change layout</button><button className="primary" disabled={!preview || pairs.length !== count} onClick={() => onNext(pairs)}>Continue to editing</button></div>
+        <div className="step-actions"><button className="text-button" onClick={onBack}>{t('upload.changeLayout')}</button><button className="primary" disabled={!preview || pairs.length !== count} onClick={() => onNext(pairs)}>{t('session.toEditing')}</button></div>
       </div>
     </>}
   </>;

@@ -6,29 +6,33 @@ import { Heading } from './shared';
 import { layouts } from './core';
 import { cardDesigns } from './designs';
 import type { RoomSession } from './rooms';
+import { useT } from '../i18n';
+import { Rich } from '../i18n/Rich';
+import { layoutName } from '../i18n/layouts';
 export function WaitingRoom({ room, busy, error, mirror, onMirrorChange, onReady, onContinue, onLeave }: { room: RoomSession; busy: boolean; error: string; mirror: boolean; onMirrorChange: (mirror: boolean) => void; onReady: (ready: boolean) => void; onContinue: () => void; onLeave: () => void }) {
   const [copy, setCopy] = useState('');
   const [cameraBusy,setCameraBusy]=useState(false),[cameraError,setCameraError]=useState('');
   const localPreview=useRef<HTMLVideoElement>(null);
   const alive=useRef(true);
+  const t=useT();
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;expirePreparedCamera();};},[]);
   async function ready(){
     unlockCameraSound();
     if(room[room.role].ready){onReady(false);return;}
     setCameraBusy(true);setCameraError('');
     try{if(room.settings.source==='camera'){const stream=await prepareCamera();if(!alive.current)return;if(localPreview.current){localPreview.current.srcObject=stream;await localPreview.current.play();}}if(alive.current)onReady(true);}
-    catch{setCameraError('Please allow camera access before getting ready. Check that another app is not using your camera.');}
+    catch{setCameraError(t('room.cameraError'));}
     finally{setCameraBusy(false);}
   }
   const invitation = `${window.location.origin}${window.location.pathname}#booth?invite=${room.invite || ''}`;
-  async function copyText(text: string, label: string) { try { await navigator.clipboard.writeText(text); setCopy(`${label} copied.`); } catch { setCopy('Select and copy the text below to share it.'); } }
-  return <><Heading eyebrow="YOUR LITTLE MEETING PLACE" title={<>A moment worth <em>waiting for.</em></>} note={`${layouts[room.settings.layout].name} · ${room.settings.template ? cardDesigns[room.settings.template].name : 'Frames chosen after photos'} · ${room.settings.source === 'upload' ? 'Upload photos' : 'Camera photos'}`} />
+  async function copyText(text: string, copied: string) { try { await navigator.clipboard.writeText(text); setCopy(copied); } catch { setCopy(t('room.copyManual')); } }
+  return <><Heading eyebrow={t('room.eyebrow')} title={<Rich text={t('room.title')} />} note={`${layoutName(layouts[room.settings.layout])} · ${room.settings.template ? cardDesigns[room.settings.template].name : t('room.framesLater')} · ${t(room.settings.source === 'upload' ? 'room.uploadPhotos' : 'room.cameraPhotos')}`} />
     <div className="waiting-room">
-      {room.settings.source==='camera'&&<div className="waiting-camera"><div className="waiting-camera-toolbar"><strong>Your camera preview</strong><button type="button" className={`mirror-toggle ${mirror?'enabled':''}`} aria-pressed={mirror} onClick={()=>onMirrorChange(!mirror)}>Mirror {mirror?'On':'Off'}</button></div><video ref={localPreview} aria-label="Your waiting-room camera" className={mirror?'mirrored':''} autoPlay muted playsInline/><p className="session-note">Select “I’m ready” to check your camera. Face a light source and keep your face near the center.</p><WarningNotice>{cameraError}</WarningNotice></div>}
-      {room.role === 'host' && <div className="room-invitation"><span className="eyebrow">SEND A LITTLE INVITATION</span><label htmlFor="room-code">Party code</label><div className="room-copy-row"><input id="room-code" readOnly value={room.code} onFocus={e => e.target.select()} /><button className="outline-button" onClick={() => copyText(room.code, 'Code')}>Copy code</button></div><label htmlFor="room-link">Invitation link</label><div className="room-copy-row"><input id="room-link" readOnly value={invitation} onFocus={e => e.target.select()} /><button className="outline-button" onClick={() => copyText(invitation, 'Link')}>Copy link</button></div><p role="status" className="session-note">{copy || 'This invitation is for one person. The room expires after 45 minutes.'}</p></div>}
-      <div className="room-people">{(['host', 'guest'] as const).map(role => <div className="room-person" key={role}><span className="room-heart" aria-hidden="true">♡</span><strong>{role === room.role ? 'You' : 'Your person'}</strong><span>{!room[role].online ? 'Waiting to join' : room[role].ready ? 'Ready for our moment' : 'Here · getting ready'}</span></div>)}</div>
-      <p className="session-note" role="status">{room.bothReady ? 'You’re both ready. You can enter the photo session.' : 'Once you’re both here and ready, the photo session will unlock.'}</p><WarningNotice>{error}</WarningNotice>
-      <div className="room-actions"><button className="outline-button" disabled={busy || cameraBusy || !!error} aria-pressed={room[room.role].ready} onClick={()=>void ready()}>{cameraBusy?'Opening camera…':room[room.role].ready ? 'Not ready yet' : 'I’m ready'}</button><button className="primary" disabled={!room.bothReady || busy || !!error} onClick={onContinue}>{room.settings.source === 'upload' ? 'Continue to photos' : 'Enter photo session'}</button></div>
-      <p className="room-stage-note">{room.settings.source === 'camera' ? 'Enter the photo session on both devices and allow camera access. You’ll see each other side by side. The creator controls the shutter; both of you receive the shared photos.' : 'Each person uploads photos in their own browser.'}</p><button className="text-button" onClick={onLeave}>{room.role === 'host' ? 'End this booth' : 'Leave this booth'}</button>
+      {room.settings.source==='camera'&&<div className="waiting-camera"><div className="waiting-camera-toolbar"><strong>{t('room.preview')}</strong><button type="button" className={`mirror-toggle ${mirror?'enabled':''}`} aria-pressed={mirror} onClick={()=>onMirrorChange(!mirror)}>{t('session.mirror', { state: t(mirror ? 'common.on' : 'common.off') })}</button></div><video ref={localPreview} aria-label={t('room.cameraLabel')} className={mirror?'mirrored':''} autoPlay muted playsInline/><p className="session-note">{t('room.readyHelp')}</p><WarningNotice>{cameraError}</WarningNotice></div>}
+      {room.role === 'host' && <div className="room-invitation"><span className="eyebrow">{t('room.inviteEyebrow')}</span><label htmlFor="room-code">{t('room.code')}</label><div className="room-copy-row"><input id="room-code" readOnly value={room.code} onFocus={e => e.target.select()} /><button className="outline-button" onClick={() => copyText(room.code, t('room.codeCopied'))}>{t('room.copyCode')}</button></div><label htmlFor="room-link">{t('room.link')}</label><div className="room-copy-row"><input id="room-link" readOnly value={invitation} onFocus={e => e.target.select()} /><button className="outline-button" onClick={() => copyText(invitation, t('room.linkCopied'))}>{t('room.copyLink')}</button></div><p role="status" className="session-note">{copy || t('room.inviteNote')}</p></div>}
+      <div className="room-people">{(['host', 'guest'] as const).map(role => <div className="room-person" key={role}><span className="room-heart" aria-hidden="true">♡</span><strong>{t(role === room.role ? 'room.you' : 'room.yourPerson')}</strong><span>{t(!room[role].online ? 'room.waiting' : room[role].ready ? 'room.ready' : 'room.gettingReady')}</span></div>)}</div>
+      <p className="session-note" role="status">{t(room.bothReady ? 'room.bothReady' : 'room.notYet')}</p><WarningNotice>{error}</WarningNotice>
+      <div className="room-actions"><button className="outline-button" disabled={busy || cameraBusy || !!error} aria-pressed={room[room.role].ready} onClick={()=>void ready()}>{cameraBusy ? t('room.openingCamera') : room[room.role].ready ? t('room.notReady') : t('room.imReady')}</button><button className="primary" disabled={!room.bothReady || busy || !!error} onClick={onContinue}>{room.settings.source === 'upload' ? t('layout.continue') : t('room.enter')}</button></div>
+      <p className="room-stage-note">{t(room.settings.source === 'camera' ? 'room.stageCamera' : 'room.stageUpload')}</p><button className="text-button" onClick={onLeave}>{t(room.role === 'host' ? 'room.end' : 'room.leave')}</button>
     </div></>;
 }

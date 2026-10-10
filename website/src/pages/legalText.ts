@@ -24,10 +24,30 @@ export type LegalLanguage = {
   notice?: string;   // translation note; English has none
   pickLabel: string; // screen-reader name of the language buttons
   pages: Record<PageId, Page>;
+  contact: ContactText;
+};
+
+// Contact page words. The phone number, email and links themselves are in Legal.tsx (CONTACTS).
+export type ContactId = 'phone' | 'email' | 'tiktok' | 'facebook' | 'telegram';
+type ContactText = {
+  title: string;
+  intro: string;
+  tip: string;                         // small note under the cards
+  soon: string;                        // shown on cards that have no link yet
+  labels: Record<ContactId, string>;   // card names
+  call: string; write: string; open: string; // button words: phone / email / social
 };
 
 const en: LegalLanguage = {
   label: 'English', locale: 'en-GB', back: 'Back home', updated: 'Last updated', pickLabel: 'Language',
+  contact: {
+    title: 'Contact us',
+    intro: 'Need help with a booth, your points or a payment? For any support, you can find us on these platforms. We will get back to you as soon as we can.',
+    tip: 'For payment questions, please include your account email and the payment reference.',
+    soon: 'Coming soon',
+    labels: { phone: 'Phone', email: 'Email', tiktok: 'TikTok', facebook: 'Facebook', telegram: 'Telegram' },
+    call: 'Call', write: 'Send email', open: 'Open',
+  },
   pages: {
     terms: {
       title: 'Terms of Service',
@@ -135,6 +155,14 @@ const en: LegalLanguage = {
 
 const my: LegalLanguage = {
   label: 'မြန်မာ', locale: 'my', back: 'ပင်မစာမျက်နှာသို့', updated: 'နောက်ဆုံး ပြင်ဆင်သည့်ရက်', pickLabel: 'ဘာသာစကား',
+  contact: {
+    title: 'ဆက်သွယ်ရန်',
+    intro: 'Booth၊ points သို့မဟုတ် ငွေပေးချေမှုနှင့် ပတ်သက်၍ အကူအညီ လိုပါသလား။ အကူအညီ လိုအပ်ပါက အောက်ပါ နည်းလမ်းများဖြင့် ကျွန်ုပ်တို့ကို ဆက်သွယ်နိုင်ပါသည်။ တတ်နိုင်သမျှ အမြန်ဆုံး ပြန်လည် ဆက်သွယ်ပေးပါမည်။',
+    tip: 'ငွေပေးချေမှုဆိုင်ရာ မေးမြန်းလိုပါက သင့်အကောင့် email နှင့် ငွေပေးချေမှု ရည်ညွှန်းနံပါတ်ကို ထည့်ပေးပါ။',
+    soon: 'မကြာမီ',
+    labels: { phone: 'ဖုန်း', email: 'Email', tiktok: 'TikTok', facebook: 'Facebook', telegram: 'Telegram' },
+    call: 'ဖုန်းခေါ်ရန်', write: 'Email ပို့ရန်', open: 'ဖွင့်ရန်',
+  },
   pages: {
     terms: {
       title: 'ဝန်ဆောင်မှု စည်းမျဉ်းများ',
@@ -242,6 +270,14 @@ const my: LegalLanguage = {
 
 const vi: LegalLanguage = {
   label: 'Tiếng Việt', locale: 'vi', back: 'Về trang chủ', updated: 'Cập nhật lần cuối', pickLabel: 'Ngôn ngữ',
+  contact: {
+    title: 'Liên hệ',
+    intro: 'Bạn cần hỗ trợ về booth, điểm hoặc thanh toán? Bạn có thể liên hệ với chúng tôi qua các kênh dưới đây. Chúng tôi sẽ phản hồi sớm nhất có thể.',
+    tip: 'Với câu hỏi về thanh toán, vui lòng gửi kèm email tài khoản và mã tham chiếu thanh toán.',
+    soon: 'Sắp ra mắt',
+    labels: { phone: 'Điện thoại', email: 'Email', tiktok: 'TikTok', facebook: 'Facebook', telegram: 'Telegram' },
+    call: 'Gọi', write: 'Gửi email', open: 'Mở',
+  },
   pages: {
     terms: {
       title: 'Điều khoản dịch vụ',

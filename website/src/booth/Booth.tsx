@@ -33,6 +33,7 @@ import { prefetchFrames } from './frameAssets';
 import { reconcileOffsets } from './photoPosition.js';
 import { useAuth } from '../auth/AuthProvider';
 import { readDraft,saveDraft,deleteDraft,readActiveSession,saveActiveSession,deleteActiveSession } from './recoveryStore.js';
+import { formatTime, tm, useT } from '../i18n';
 
 /**
  * A "Your photos" session saved on this device before editing is confirmed.
@@ -61,15 +62,14 @@ function boothInfo(conflict: SessionConflict): ActiveBoothInfo {
     lastSaved: record.savedAt ? shortTime(record.savedAt) : undefined, ended: !!conflict.roomEnded, guest, hasSavedPhotos: !!total && saved > 0 };
 }
 const roomGone = (error: unknown) => error instanceof RoomRequestError && (error.status === 403 || error.status === 404);
-const shortTime = (value?: string | number) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+const shortTime = (value?: string | number) => value ? formatTime(value) : '';
 const needsPoints = (message?: string) => !!message && /points|top up/i.test(message);
-
-const progress: [Step, string][] = [['mode', 'Solo or duo'], ['source', 'Photo source'], ['layout', 'Your layout'], ['session', 'Your photos'], ['design', 'Frame & filter'], ['export', 'Export & download']];
 
 export function Booth({ active, invite, leaveGuard }: { active: boolean; invite: string | null; leaveGuard: RefObject<(proceed: () => void) => void> }) {
   const activeSaved=useRef(false);          // true once this tab's active session is stored on the device
   const party = useRoom(activeSaved);        // a saved session keeps its room open across a refresh
   const charge = useSessionCharge();
+  const t = useT();
   const {user}=useAuth();
   const [saveRecovery,setSaveRecovery]=useState(true),[savedDraft,setSavedDraft]=useState<any>(null),[recoveryMessage,setRecoveryMessage]=useState('');
   const [restored,setRestored]=useState(false);
@@ -114,7 +114,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     if(guest&&!editingApproved)return Promise.resolve();
     const draft={card,source,mode,sessionId:charge.sessionId,guest,step:step==='export'?'export':'design',editingApproved};
     const task=recoveryWrites.current.catch(()=>{}).then(()=>saveDraft(user.id,draft));recoveryWrites.current=task;
-    return task.then(()=>setRecoveryMessage('Recovery copy saved on this device for 24 hours.')).catch(()=>{setRecoveryMessage('This browser could not save recovery. Keep this tab open until you download.');if(required)throw new Error('Recovery could not be saved. Free some device storage or turn off recovery before continuing. No new charge was made.');});
+    return task.then(()=>setRecoveryMessage(t('booth.recoverySaved'))).catch(()=>{setRecoveryMessage(t('booth.recoveryFailed'));if(required)throw new Error(t('booth.recoveryRequired'));});
   }
   // Put a saved "Your photos" session back on screen (after its reservation/room was reattached).
   function applyRecord(record: ActiveRecord, step: Step = record.step) {
@@ -125,8 +125,8 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     setSaveRecovery(record.photosSaved); setEditingApproved(false);
     setRetake(null); setRestoreCamera(false); setInstructions(false); setConflict(null);
     setStep(step);
-    const welcome = record.room ? 'Welcome back. You are reconnected to your duo booth.' : 'Welcome back. Your session was restored.';
-    setRecoveryMessage(record.photosSaved ? `${welcome} Your photos were kept.` : `${welcome} Auto-save was off, so please take or choose your photos again.`);
+    const welcome = t(record.room ? 'booth.welcomeDuo' : 'booth.welcomeSolo');
+    setRecoveryMessage(`${welcome} ${t(record.photosSaved ? 'booth.photosKept' : 'booth.autosaveWasOff')}`);
   }
   /**
    * Reattach everything a saved session needs, then show it.
@@ -156,11 +156,11 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       // Nothing to keep: the guest has no reservation and the room is gone.
       if (user) recoveryWrites.current = recoveryWrites.current.catch(()=>{}).then(()=>deleteActiveSession(user.id)).catch(()=>{});
       activeSaved.current = false; setConflict(null); setStep('mode');
-      setRecoveryMessage('The duo booth you were in has ended. Ask your person for a new invitation.');
+      setRecoveryMessage(t('booth.duoEnded'));
       return;
     }
     setConflict(current => ({ origin: current?.origin || 'load', sessionId: record.sessionId, duo: record.mode === 'duo', local: record, roomEnded: ended,
-      error: ended ? undefined : error instanceof Error ? error.message : 'We could not reopen this booth automatically. Please try again.' }));
+      error: ended ? undefined : error instanceof Error ? error.message : t('booth.reopenFailed') }));
   }
   // On opening the booth, restore in this order (only one of these exists at a time):
   //   1. a paid editing draft            → Frame & filter / Export   (existing behaviour)
@@ -184,7 +184,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         // Older opt-in drafts and pre-payment backups remain manually resumable.
         if(!draft.editingApproved)return;
         try{if(!draft.guest)await charge.resume(draft.sessionId);}
-        catch{if(!cancelled)setSharedError('Your saved editing could not be restored automatically. Please try Resume saved editing.');return;}
+        catch{if(!cancelled)setSharedError(t('booth.restoreFailed'));return;}
         if(cancelled)return;
         recoveredGuest.current=!!draft.guest;setRestored(true);setCard(draft.card);
         setSource(draft.source);setMode(draft.mode);setEditingApproved(true);
@@ -222,7 +222,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       ...(savedRoom?{room:savedRoom}:{}),...(savingDuoUpload?{duoUploads:saveRecovery?duoUploads:[]}:{})};
     const task=recoveryWrites.current.catch(()=>{}).then(()=>saveActiveSession(user.id,record));
     recoveryWrites.current=task;
-    task.then(()=>{activeSaved.current=true;},()=>setRecoveryMessage('This browser could not save your session. Keep this tab open until you finish.'));
+    task.then(()=>{activeSaved.current=true;},()=>setRecoveryMessage(t('booth.sessionSaveFailed')));
   },[activeSessionOpen,card,duoUploads,source,step,saveRecovery,charge.sessionId,roomKey]);
   // Once editing is confirmed, the editing draft takes over, so the pre-edit record is removed.
   useEffect(()=>{
@@ -240,11 +240,11 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
         // Photos for this session are not on this device: keep the held booth and continue from photo source.
         setCard(current=>({...current,shots:[],offsets:[],template:null}));
         setMode('solo');setRetake(null);setInstructions(false);setConflict(null);setStep('source');
-        setRecoveryMessage('Your booth is still held. Choose your photo source and layout to continue. No extra points are used.');
+        setRecoveryMessage(t('booth.stillHeld'));
       }
     }catch(e){
       if(conflict.local){resumeFailed(conflict.local,e);}
-      else{charge.clearError();setConflict(current=>current&&{...current,error:e instanceof Error?e.message:'We could not resume this session. Please try again.'});}
+      else{charge.clearError();setConflict(current=>current&&{...current,error:e instanceof Error?e.message:t('booth.resumeFailed')});}
     }finally{setResuming(false);}
   }
   async function startNewSession(){
@@ -259,13 +259,13 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
       setConflict(null);setInstructions(false);
       if(continueNew){
         // The user was starting a new booth when the old one blocked it: carry straight on.
-        setRecoveryMessage('Your earlier booth was closed. Starting your new booth now.');
+        setRecoveryMessage(t('booth.closedStarting'));
         void startSession();
       }else{
         setStep('mode');
-        setRecoveryMessage('Your earlier booth was closed. Nothing was charged. You can start a new booth now.');
+        setRecoveryMessage(t('booth.closedNew'));
       }
-    }catch(e){setConflict(current=>current&&{...current,error:e instanceof Error?e.message:'We could not close that booth. Check your connection and try again.'});}
+    }catch(e){setConflict(current=>current&&{...current,error:e instanceof Error?e.message:t('booth.closeFailed')});}
     finally{setClosing(false);}
   }
   /**
@@ -319,7 +319,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     setRestored(false);
     if(removeSaved&&user){
       activeSaved.current=false;
-      recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>Promise.all([deleteDraft(user.id),deleteActiveSession(user.id)])).then(()=>{}).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});
+      recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>Promise.all([deleteDraft(user.id),deleteActiveSession(user.id)])).then(()=>{}).catch(()=>{setRecoveryMessage(t('booth.removeFailed'));});
       setSavedDraft(null);setRecoveryMessage('');
     }
     editingGate.current?.cancel(); setConfirmation({open:false,busy:false,error:''}); setEditingApproved(false);
@@ -347,7 +347,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     if (['session','upload'].includes(target) && editingApproved) {
       if (party.room?.role === 'guest') return;
       if (party.room && source === 'camera') {
-        void duoControl.current?.({type:'retake', index:null}).then(commit).catch(() => setSharedError('Reconnect your cameras before returning to your photos.'));
+        void duoControl.current?.({type:'retake', index:null}).then(commit).catch(() => setSharedError(t('booth.reconnectToReturn')));
       } else commit();
       return;
     }
@@ -388,14 +388,14 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     }
     const apply = () => { setCard(current => { const shots = move(current.shots, from, to); const offsets = move(current.shots.map((_, i) => current.offsets?.[i] || { x: .5, y: .5 }), from, to); return { ...current, shots, offsets }; }); setRetake(null); };
     if (party.room?.role === 'host' && source === 'camera') {
-      void duoControl.current?.({ type: 'move', from, to }).then(apply).catch(() => setSharedError('Reconnect your cameras before changing the shared photo order.'));
+      void duoControl.current?.({ type: 'move', from, to }).then(apply).catch(() => setSharedError(t('booth.reconnectToReorder')));
     } else apply();
   };
   async function retakeFromEdit(index: number | null) {
     if (party.room && source === 'camera') {
       if (party.room.role !== 'host' || !duoControl.current) return;
       try { await duoControl.current({ type: 'retake', index }); setSharedError(''); }
-      catch { setSharedError('Your person is disconnected. Leave this booth and create a new session to retake together.'); return; }
+      catch { setSharedError(t('booth.partnerGoneRetake')); return; }
     }
     setRetake(index); setStep(source === 'upload' ? 'upload' : 'session');
   }
@@ -449,20 +449,21 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   }
   // While the user decides about an unfinished session, only the resume panel is shown.
   const showSteps = active && !conflict;
-  const visibleProgress: [Step, string][] = mode === 'duo' && ['duo', 'join', 'room'].includes(step) ? [['duo', 'Create or join'], ['join', 'Invitation'], ['room', 'Your party']] : progress;
+  const progress: [Step, string][] = [['mode', t('booth.step.mode')], ['source', t('booth.step.source')], ['layout', t('booth.step.layout')], ['session', t('booth.step.session')], ['design', t('booth.step.design')], ['export', t('booth.step.export')]];
+  const visibleProgress: [Step, string][] = mode === 'duo' && ['duo', 'join', 'room'].includes(step) ? [['duo', t('booth.step.duo')], ['join', t('booth.step.join')], ['room', t('booth.step.room')]] : progress;
   return <>
-    <section id="booth" className="booth flow-booth" data-current-step={step} hidden={!active} aria-label="Photobooth">
-      <div className="flow-top"><a href="#" className="back-link">Leave the booth</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>How it works</button></div>
-      <ol className="flow-steps" aria-label="Your photobooth progress">{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
+    <section id="booth" className="booth flow-booth" data-current-step={step} hidden={!active} aria-label={t('booth.label')}>
+      <div className="flow-top"><a href="#" className="back-link">{t('booth.leave')}</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>{t('nav.how')}</button></div>
+      <ol className="flow-steps" aria-label={t('booth.progress')}>{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
       <div id="flow-screen" ref={screen}>
-        {active&&savedDraft&&<div className="session-note recovery-panel"><p>A previous photocard is saved on this device.</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:'Could not resume.');}}}>Resume saved editing</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError("Could not delete the saved copy. Please try again."));setSavedDraft(null);}}>Delete saved copy</button><WarningNotice>{sharedError}</WarningNotice></div>}
-        {active&&['session','upload','design','export'].includes(step)&&<details className="session-note recovery-panel recovery-options"><summary>{saveRecovery ? "Auto-save on this device" : "Auto-save is off"}</summary><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage("Could not remove the recovery copy. Clear this site’s browser storage to remove it.");});setRecoveryMessage('Saved copy removed.');}}}/><span>Automatically save editing on this device</span></label><p>Enabled by default so refreshing restores your editing. Photos stay on this device for up to 24 hours. Leaving the booth deletes the saved copy.</p></details>}{active&&recoveryMessage&&<p className="session-note recovery-status" role="status">{recoveryMessage}</p>}
+        {active&&savedDraft&&<div className="session-note recovery-panel"><p>{t('booth.draftSaved')}</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:t('booth.resumeFailed'));}}}>{t('booth.resumeDraft')}</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError(t('booth.deleteFailed')));setSavedDraft(null);}}>{t('booth.deleteDraft')}</button><WarningNotice>{sharedError}</WarningNotice></div>}
+        {active&&['session','upload','design','export'].includes(step)&&<details className="session-note recovery-panel recovery-options"><summary>{t(saveRecovery ? 'booth.autosaveOn' : 'booth.autosaveOff')}</summary><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage(t('booth.removeFailed'));});setRecoveryMessage(t('booth.copyRemoved'));}}}/><span>{t('booth.autosaveLabel')}</span></label><p>{t('booth.autosaveHelp')}</p></details>}{active&&recoveryMessage&&<p className="session-note recovery-status" role="status">{recoveryMessage}</p>}
         {/* Points problems get the top-up link; an "active booth" refusal opens the booth popup instead (fallback text if it cannot be found). */}
-        {active && !confirmation.open && !conflict && !checkingConflict && charge.error && <WarningNotice title={/active booth/i.test(charge.error) ? 'You already have a booth open' : 'Before you continue'}>
-          {/active booth/i.test(charge.error) ? <p>We could not reopen it from here. It closes by itself 45 minutes after it started, and nothing was charged for it. Open My account to go back to it, or try again in a few minutes.</p> : <p>{charge.error}</p>}
-          {needsPoints(charge.error) && <><a href="#account/buy" target="_blank" rel="noopener noreferrer">Open account & top up</a><p>Your photos stay here while you check your account.</p></>}</WarningNotice>}
+        {active && !confirmation.open && !conflict && !checkingConflict && charge.error && <WarningNotice title={t(/active booth/i.test(charge.error) ? 'booth.alreadyOpen' : 'booth.beforeContinue')}>
+          {/active booth/i.test(charge.error) ? <p>{t('booth.alreadyOpenText')}</p> : <p>{tm(charge.error)}</p>}
+          {needsPoints(charge.error) && <><a href="#account/buy" target="_blank" rel="noopener noreferrer">{t('booth.topUp')}</a><p>{t('booth.photosStay')}</p></>}</WarningNotice>}
         {active && ['session','upload','design','export'].includes(step) && <div className="session-note" aria-live="polite">
-          {party.room?.role === 'guest' ? 'Your creator covers this session. No points or free trial are used from your account.' : charge.busy ? 'Confirming your session…' : charge.receipt || 'Nothing is deducted until you confirm that you’re ready to edit. Your free trial is used first, otherwise 100 points.'}
+          {party.room?.role === 'guest' ? t('booth.guestCovered') : charge.busy ? t('booth.confirmingSession') : charge.receipt ? tm(charge.receipt) : t('booth.nothingYet')}
         </div>}
         {showSteps && step === 'mode' && <ModeScreen onChoose={choice => { setMode(choice); clearPhotos(); change({template:null}); setStep('source'); }} />}
         {showSteps && step === 'duo' && <DuoChoice onCreate={() => { party.end(); setStep('layout'); }} onJoin={() => { party.end(); setUseInvite(false); setStep('join'); }} onBack={() => setStep('source')} />}
@@ -481,11 +482,11 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     <Instructions open={active && !savedDraft && !conflict && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
     <div id="print-sheet" aria-hidden="true" />
     <LeaveDialog duo={duoActive} open={!!pendingLeave} count={duoUploads.some(Boolean) ? duoUploads.filter(Boolean).length : card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); void duoControl.current?.({type:'leave'}).catch(() => {}); clearPhotos(); proceed?.(); }} />
-    <BoothDialog open={active && confirmation.open && !disconnectOpen && !pendingLeave} title="Proceed to Editing?" cancelLabel="Retake / Cancel" confirmLabel={charge.cost === 0 ? 'Confirm & Use Free Trial' : 'Confirm & Deduct Points'} busy={confirmation.busy} error={confirmation.error} onCancel={() => editingGate.current?.cancel()} onConfirm={() => void editingGate.current?.confirm()}>
-      <p>Review your photos carefully. Once you continue to framing and export, {charge.cost === 0 ? 'your free trial will be used and 0 points will be deducted from your account.' : `${charge.cost ?? 100} points will be deducted from your account.`}</p>
+    <BoothDialog open={active && confirmation.open && !disconnectOpen && !pendingLeave} title={t('booth.confirm.title')} cancelLabel={t('booth.confirm.cancel')} confirmLabel={t(charge.cost === 0 ? 'booth.confirm.trial' : 'booth.confirm.points')} busy={confirmation.busy} error={confirmation.error} onCancel={() => editingGate.current?.cancel()} onConfirm={() => void editingGate.current?.confirm()}>
+      <p>{charge.cost === 0 ? t('booth.confirm.textTrial') : t('booth.confirm.textPoints', { n: charge.cost ?? 100 })}</p>
     </BoothDialog>
-    <BoothDialog open={disconnectOpen} title="Partner Disconnected" cancelLabel="Stay in Room" confirmLabel="Leave Booth" busy={confirmation.busy} onCancel={() => { setDisconnectAcknowledged(true); void party.check(); }} onConfirm={() => { editingGate.current?.cancel(); clearPhotos(); party.end(); setStep('mode'); }}>
-      <p>{explicitDisconnect ? 'Your partner has left the session.' : 'Your partner has lost their connection. If they refreshed or reopened the page, they will reconnect automatically in a few seconds.'} Would you like to stay in the room or leave?</p>
+    <BoothDialog open={disconnectOpen} title={t('booth.lost.title')} cancelLabel={t('booth.lost.stay')} confirmLabel={t('booth.lost.leave')} busy={confirmation.busy} onCancel={() => { setDisconnectAcknowledged(true); void party.check(); }} onConfirm={() => { editingGate.current?.cancel(); clearPhotos(); party.end(); setStep('mode'); }}>
+      <p>{t(explicitDisconnect ? 'booth.lost.left' : 'booth.lost.connection')} {t('booth.lost.question')}</p>
     </BoothDialog>
   </>;
 }

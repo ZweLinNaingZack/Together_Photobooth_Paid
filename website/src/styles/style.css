@@ -148,3 +148,54 @@ body,button,input,select,textarea{font-family:var(--sans)}
 .legal-page:lang(my) .legal-body,.legal-page:lang(my) .legal-intro p{line-height:2.1}
 .legal-page:lang(my) .legal-updated{text-transform:none;letter-spacing:.2px}
 .legal-page:lang(vi) h1{letter-spacing:-1px;line-height:1.1}
+/* ---- Contact page: one card per way to reach us ---- */
+.contact-list{list-style:none;margin:30px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.contact-card{border:1px solid var(--line);border-radius:10px;padding:20px 22px;display:flex;flex-direction:column;gap:6px;background:#faf8f2}
+.contact-label{font-size:12px;font-weight:650;letter-spacing:1.4px;text-transform:uppercase;color:var(--red)}
+.contact-value{font-size:18px;color:var(--ink);overflow-wrap:break-word;text-align:start}
+.legal-page a.contact-action{margin-top:8px;align-self:flex-start;font-size:14px;color:var(--ink);text-decoration:none;border:1px solid var(--ink);border-radius:999px;padding:7px 15px}
+.legal-page a.contact-action:hover{background:var(--ink);color:var(--paper)}
+.contact-card.is-soon{background:none;border-style:dashed}
+.contact-card.is-soon .contact-value{color:var(--muted);font-size:15px}
+.contact-tip{font-size:14px;line-height:1.7;color:var(--muted);margin:24px 0 0}
+.contact-page:lang(my) .contact-label{text-transform:none;letter-spacing:0;font-size:14px}
+@media(max-width:600px){.contact-list{grid-template-columns:1fr}}
+
+/* ---- Language button in the top bar ---- */
+.lang-switch{position:relative;display:inline-flex}
+.lang-button{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:border-color .2s,background .2s}
+.lang-button:hover,.lang-button[aria-expanded=true]{border-color:var(--ink);background:#fbf9f3}
+.lang-button:focus-visible,.lang-menu button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.lang-caret{transition:transform .2s}.lang-button[aria-expanded=true] .lang-caret{transform:rotate(180deg)}
+/* The menu drops down under the button, aligned to its right edge so it never leaves the screen. */
+.lang-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:50;min-width:200px;padding:6px;background:#fffdf8;border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(38,42,39,.14);display:grid;gap:2px;animation:rise .18s ease both}
+.lang-menu button{display:grid;grid-template-columns:1fr auto;align-items:center;text-align:start;gap:0 10px;padding:10px 12px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;cursor:pointer}
+.lang-menu button:hover{background:#f3efe4}
+.lang-menu button[aria-checked=true]{background:#f3efe4}
+.lang-name{font-size:15px;font-weight:600}
+.lang-menu small{grid-column:1;font-size:12px;color:var(--muted)}
+.lang-check{grid-column:2;grid-row:1/3;color:var(--red);font-weight:700}
+
+/* ---- Burmese (မြန်မာ) ----
+   Burmese letters stack above and below the line, so they need more line height, and the
+   big tight English headline style (huge size, negative letter spacing) breaks them.
+   The fonts listed are already on phones and computers, so nothing extra downloads. */
+/* Every Burmese element (whole page in Burmese, or the language menu label) gets a font list with Burmese
+   fonts. !important because headings and buttons set their own font elsewhere. */
+:lang(my){font-family:var(--sans),'Noto Sans Myanmar','Myanmar Text','Myanmar Sangam MN','Padauk',sans-serif!important}
+html:lang(my) h1{font-size:clamp(40px,5vw,66px);letter-spacing:0;line-height:1.45}
+html:lang(my) h2{font-size:clamp(28px,3.4vw,42px);letter-spacing:0;line-height:1.55}
+html:lang(my) h3{line-height:1.6}
+html:lang(my) p,html:lang(my) li,html:lang(my) .faq-answer,html:lang(my) summary{line-height:1.95}
+html:lang(my) .eyebrow,html:lang(my) .orbit-label{letter-spacing:0;line-height:1.7}
+html:lang(my) .hero h1{font-size:clamp(42px,5.2vw,68px)}
+html:lang(my) .about-intro h1{font-size:clamp(42px,5.4vw,70px)}
+html:lang(my) .flow-heading h1{line-height:1.5}
+html:lang(my) .header nav{gap:16px}
+/* Vietnamese accents sit above and below letters too: give tight headlines a bit more room. */
+html:lang(vi) h1{line-height:1.08;letter-spacing:-2px}
+html:lang(vi) h2{line-height:1.15}
+@media(max-width:800px){html:lang(my) h1,html:lang(my) .hero h1{font-size:40px}html:lang(my) h2{font-size:30px}}
+/* Small screens: let the menu wrap onto a second line instead of pushing the page sideways. */
+@media(max-width:800px){.header nav{flex-shrink:1;min-width:0;max-width:100%;flex-wrap:wrap;row-gap:2px;column-gap:16px}}
+@media(max-width:420px){.lang-button{padding:0 10px}html:lang(my) h1,html:lang(my) .hero h1{font-size:34px}}

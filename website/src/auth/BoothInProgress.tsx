@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './client';
 import { readActiveSession, readDraft } from '../booth/recoveryStore.js';
+import { formatTime, useT } from '../i18n';
 
 type Found = { kind: 'editing' } | { kind: 'booth'; heldUntil?: string };
 
@@ -11,6 +12,7 @@ type Found = { kind: 'editing' } | { kind: 'booth'; heldUntil?: string };
  */
 export function BoothInProgress({ userId }: { userId: string }) {
   const [found, setFound] = useState<Found | null>(null);
+  const t = useT();
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -19,18 +21,17 @@ export function BoothInProgress({ userId }: { userId: string }) {
       if (draft?.editingApproved) { setFound({ kind: 'editing' }); return; }
       if (record) { setFound({ kind: 'booth' }); return; }
       const { data } = await supabase?.rpc('together_active_session') ?? { data: null };
-      if (active && data?.session_id) setFound({ kind: 'booth', heldUntil: data.expires_at ? new Date(data.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined });
+      if (active && data?.session_id) setFound({ kind: 'booth', heldUntil: data.expires_at ? formatTime(data.expires_at) : undefined });
     })().catch(() => {});
     return () => { active = false; };
   }, [userId]);
   if (!found) return null;
   return <section className="dashboard-card booth-progress-card" aria-labelledby="booth-progress-title">
     <div>
-      <h2 id="booth-progress-title">{found.kind === 'editing' ? 'Your photo card is waiting' : 'Your booth is still open'}</h2>
-      <p>{found.kind === 'editing'
-        ? 'It is saved on this device and already paid for. Go back to finish editing and download it.'
-        : `Go back to pick up where you left off${found.heldUntil ? `. It is held for you until ${found.heldUntil}` : ''}. Nothing has been charged yet.`}</p>
+      <h2 id="booth-progress-title">{t(found.kind === 'editing' ? 'progress.editing.title' : 'progress.booth.title')}</h2>
+      <p>{found.kind === 'editing' ? t('progress.editing.text')
+        : found.heldUntil ? t('progress.booth.textHeld', { time: found.heldUntil }) : t('progress.booth.text')}</p>
     </div>
-    <a className="primary" href="#booth">{found.kind === 'editing' ? 'Finish my photo card' : 'Go back to my booth'}</a>
+    <a className="primary" href="#booth">{t(found.kind === 'editing' ? 'progress.editing.button' : 'progress.booth.button')}</a>
   </section>;
 }

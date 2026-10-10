@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { renderCard } from './renderCard';
 import { cardDesigns } from './designs';
 import type { CardState } from './types';
+import { useT } from '../i18n';
 
 export function CameraCardPreview({ card, ready, capture, retake }: { card: CardState; ready: boolean; capture: () => Promise<string>; retake: number | null }) {
   const latest = useRef({ card, ready, capture, retake }); latest.current = { card, ready, capture, retake };
   const [preview, setPreview] = useState('');
   const [open, setOpen] = useState(false);
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
@@ -27,5 +29,5 @@ export function CameraCardPreview({ card, ready, capture, retake }: { card: Card
     void update();
     return () => { cancelled = true; clearTimeout(timer); };
   }, [open]);
-  return <details className="camera-card-preview" onToggle={event => setOpen(event.currentTarget.open)}><summary>Preview your frame</summary>{preview && <img src={preview} alt="Selected frame with captured photos and the current camera pose" />}<p>The next photo appears in its frame. Your original captures stay unchanged.</p></details>;
+  return <details className="camera-card-preview" onToggle={event => setOpen(event.currentTarget.open)}><summary>{t('framePreview.summary')}</summary>{preview && <img src={preview} alt={t('framePreview.alt')} />}<p>{t('framePreview.text')}</p></details>;
 }

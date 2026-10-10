@@ -5,9 +5,11 @@ import { cardDesigns } from './designs';
 import type { CardDesign } from './designs';
 import { layouts } from './core';
 import { panOffset, clampOffset } from './photoPosition.js';
+import { useT } from '../i18n';
 
 export function PhotoPan({card,onChange}:{card:CardState;onChange:(patch:Partial<CardState>)=>void}) {
   const [sizes,setSizes]=useState<{w:number;h:number}[]>([]);
+  const t=useT();
   const drag=useRef<{id:number;index:number;x:number;y:number;offset:{x:number;y:number};matrix:DOMMatrix}|null>(null);
   const design=card.template ? cardDesigns[card.template] : null, layout=layouts[card.layout];
   const [cx,cy,w,h]=design?.crop || [0,0,layout.width,layout.height];
@@ -23,10 +25,10 @@ export function PhotoPan({card,onChange}:{card:CardState;onChange:(patch:Partial
     drag.current={id:e.pointerId,index,x:p.x,y:p.y,matrix,offset:card.offsets?.[index]||{x:.5,y:.5}};
   }
   function move(e:PointerEvent<SVGPathElement>){const d=drag.current;if(!d||d.id!==e.pointerId)return;const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(d.matrix),s=slots[d.index],size=sizes[d.index];update(d.index,panOffset(d.offset,p.x-d.x,p.y-d.y,size.w,size.h,s.w,s.h));}
-  return <svg className="photo-pan" viewBox={`${cx} ${cy} ${w} ${h}`} aria-label="Reposition photos" preserveAspectRatio="xMidYMid meet">
+  return <svg className="photo-pan" viewBox={`${cx} ${cy} ${w} ${h}`} aria-label={t('pan.label')} preserveAspectRatio="xMidYMid meet">
     {slots.map((slot,i)=>{
       const path=slot.poly ? `M${slot.poly.map(p=>p.join(' ')).join(' L')}Z` : `M${slot.x} ${slot.y}h${slot.w}v${slot.h}h${-slot.w}Z`;
-      return <path key={i} d={path} transform={slot.rotation ? `rotate(${slot.rotation.join(' ')})` : undefined} tabIndex={0} role="button" aria-label={`Reposition photo ${i+1}. Drag or use arrow keys. Home centers the photo.`}
+      return <path key={i} d={path} transform={slot.rotation ? `rotate(${slot.rotation.join(' ')})` : undefined} tabIndex={0} role="button" aria-label={t('pan.photo', { n: i + 1 })}
         onPointerDown={e=>start(e,i)} onPointerMove={move} onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}} onLostPointerCapture={()=>{drag.current=null;}}
         onKeyDown={e=>{
           const offset=card.offsets?.[i]||{x:.5,y:.5};

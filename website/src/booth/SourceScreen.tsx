@@ -1,9 +1,13 @@
 import { Heading } from './shared';
+import { useT } from '../i18n';
+import { Rich } from '../i18n/Rich';
+
 export function SourceScreen({ mode, onChoose, onBack }: { mode: 'solo' | 'duo'; onChoose: (source: 'camera' | 'upload') => void; onBack: () => void }) {
-  return <><Heading eyebrow={mode === 'duo' ? 'YOUR SHARED KEEPSAKE' : 'YOUR MOMENTS, YOUR WAY'} title={<>Start fresh. <em>Or look back.</em></>} note={mode === 'duo' ? 'Take photos together with an invitation, or upload both sides yourself—no invitation needed. Choose your source, then your layout. Frames come after your photos.' : 'Take a new set of photos, or turn favorites from your gallery into a keepsake.'} />
+  const t = useT();
+  return <><Heading eyebrow={t(mode === 'duo' ? 'source.eyebrow.duo' : 'source.eyebrow.solo')} title={<Rich text={t('source.title')} />} note={t(mode === 'duo' ? 'source.note.duo' : 'source.note.solo')} />
     <div className="source-options">
-      <button className="source-option" onClick={() => onChoose('camera')}><span className="eyebrow">MAKE A NEW MEMORY</span><strong>Take photos</strong><p>Step into the booth with your camera. Choose a timer, add a little flash, and strike a pose.</p><span className="source-action">Use the photobooth</span></button>
-      <button className="source-option" onClick={() => onChoose('upload')}><span className="eyebrow">KEEP A FAVORITE MEMORY</span><strong>Upload photos</strong><p>Bring photos from your device. Arrange them in your chosen design and make them yours.</p><span className="source-action">Choose existing photos</span></button>
-    </div><div className="step-actions"><button className="text-button" onClick={onBack}>Change solo or duo</button></div>
+      <button className="source-option" onClick={() => onChoose('camera')}><span className="eyebrow">{t('source.camera.eyebrow')}</span><strong>{t('source.camera.title')}</strong><p>{t('source.camera.text')}</p><span className="source-action">{t('source.camera.action')}</span></button>
+      <button className="source-option" onClick={() => onChoose('upload')}><span className="eyebrow">{t('source.upload.eyebrow')}</span><strong>{t('source.upload.title')}</strong><p>{t('source.upload.text')}</p><span className="source-action">{t('source.upload.action')}</span></button>
+    </div><div className="step-actions"><button className="text-button" onClick={onBack}>{t('source.back')}</button></div>
   </>;
 }

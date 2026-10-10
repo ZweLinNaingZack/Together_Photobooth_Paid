@@ -7,6 +7,7 @@ import { Wallet } from './Wallet';
 import './account.css';
 import { readBoothReturn } from './inviteReturn.js';
 import { SecuritySettings } from './SecuritySettings';
+import { useT } from '../i18n';
 
 // Google-only test phase. Account.tsx retains the email flows for later use.
 export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy' | 'admin' }) {
@@ -16,13 +17,14 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
   const [retry, setRetry] = useState(0);
   const lock = useRef(false);
   const [signout, setSignout] = useState(false);
+  const t = useT();
   useEffect(() => {
     const controller = new AbortController();
     setAvailable(null); setError('');
     googleAvailable(controller.signal).then(value => {
       if (!controller.signal.aborted) setAvailable(value);
     }).catch(() => {
-      if (!controller.signal.aborted) { setAvailable(false); setError('We couldn’t check Google sign-in. Please try again.'); }
+      if (!controller.signal.aborted) { setAvailable(false); setError(t('google.checkFailed')); }
     });
     return () => controller.abort();
   }, [retry]);
@@ -35,37 +37,37 @@ export function GoogleAccount({ page = 'overview' }: { page?: 'overview' | 'buy'
       });
       if (error) throw error;
     } catch {
-      setError('Google sign-in could not start. Please try again.');
+      setError(t('google.startFailed'));
     } finally { lock.current = false; setBusy(false); }
   }
   const returnTo = readBoothReturn() || '#booth';
   return <section className={`account-page ${user ? 'account-workspace' : ''}`} aria-labelledby="account-title">
-    <div className="eyebrow">YOUR LITTLE PLACE AT TOGETHER</div>
-    <h1 id="account-title">{user ? page === 'buy' ? 'More moments await.' : page === 'admin' ? 'Payment reviews.' : 'Your little moments.' : 'A little closer.'}</h1>
-    <p className="account-intro">{user ? user.email : 'Sign in with Google to start making memories.'}</p>
+    <div className="eyebrow">{t('account.eyebrow')}</div>
+    <h1 id="account-title">{user ? page === 'buy' ? t('google.title.buy') : page === 'admin' ? 'Payment reviews.' : t('google.title.overview') : t('account.title.signin')}</h1>
+    <p className="account-intro">{user ? user.email : t('google.intro')}</p>
     <div className="account-panel">
-      {loading ? <p role="status">Checking your account…</p> : !supabase ? <WarningNotice>Sign-in is not configured yet. Please try again later.</WarningNotice> : user ? <>
+      {loading ? <p role="status">{t('nav.checkingAccount')}</p> : !supabase ? <WarningNotice>{t('account.notConfigured')}</WarningNotice> : user ? <>
         <Wallet key={user.id} userId={user.id} page={page} />
         {page === 'overview' && <SecuritySettings email={user.email || ''} />}
         <div className="account-footer-actions">
-        <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional hint. */ } }}>Take the photos now</a>
-        <button className="signout-button" disabled={busy} onClick={() => setSignout(true)}>Sign out</button>
-        <BoothDialog open={signout} title="Sign out?" cancelLabel="Stay signed in" confirmLabel="Sign out" busy={busy} onCancel={() => setSignout(false)} onConfirm={async () => {
+        <a className="primary" href={returnTo} onClick={() => { try { sessionStorage.removeItem('together-after-signin'); } catch { /* Optional hint. */ } }}>{t('common.takePhotos')}</a>
+        <button className="signout-button" disabled={busy} onClick={() => setSignout(true)}>{t('account.signOut')}</button>
+        <BoothDialog open={signout} title={t('google.signoutTitle')} cancelLabel={t('google.staySignedIn')} confirmLabel={t('account.signOut')} busy={busy} onCancel={() => setSignout(false)} onConfirm={async () => {
           if (lock.current) return; lock.current = true; setBusy(true); setError('');
           try { const { error } = await supabase!.auth.signOut({ scope: 'local' }); if (error) throw error; }
-          catch { setError('We couldn’t sign you out. Please try again.'); }
+          catch { setError(t('account.signoutFailed')); }
           finally { lock.current = false; setBusy(false); setSignout(false); }
-        }}><p>You can sign back in any time. Your points and payment requests will stay in your account.</p></BoothDialog></div>
+        }}><p>{t('google.signoutText')}</p></BoothDialog></div>
       </> : <>
         <button className="outline-button account-google" disabled={busy || available !== true} onClick={() => void signIn()}>
-          {busy ? 'Opening Google…' : available === null ? 'Checking Google sign-in…' : 'Continue with Google'}
+          {busy ? t('google.opening') : available === null ? t('google.checking') : t('account.google')}
         </button>
-        <p>New here? Your account is created when you continue with Google.</p>
-        <small>We’re using Google sign-in during this test phase.</small>
-        {available === false && <><p role="status">Google sign-in is temporarily unavailable.</p><button className="text-button" disabled={busy} onClick={() => setRetry(n => n + 1)}>Try again</button></>}
+        <p>{t('google.newHere')}</p>
+        <small>{t('google.testPhase')}</small>
+        {available === false && <><p role="status">{t('google.unavailable')}</p><button className="text-button" disabled={busy} onClick={() => setRetry(n => n + 1)}>{t('common.tryAgain')}</button></>}
       </>}
       {(error || callbackError) && <WarningNotice>{error || callbackError}</WarningNotice>}
     </div>
-    <a className="text-button" href="#">Back to Together</a>
+    <a className="text-button" href="#">{t('common.backToTogether')}</a>
   </section>;
 }

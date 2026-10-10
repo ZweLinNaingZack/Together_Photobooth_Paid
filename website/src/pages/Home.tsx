@@ -1,24 +1,45 @@
 import { LegalLinks } from './LegalLinks';
 import { DecorativeIcon } from '../components/DecorativeIcon';
 import { HeroArt } from '../components/HeroArt';
-export function Home(){return (    <div id="home">
-      <section className="hero" aria-labelledby="hero-title">
-        <div className="hero-copy"><div className="eyebrow"><span className="tiny-star"><DecorativeIcon /></span> YOUR PEOPLE. ANY DISTANCE.</div><h1 id="hero-title">Different places.<br />Same <em>little</em><br /><span className="last-line">moment.<span className="title-star" aria-hidden="true"><DecorativeIcon /></span></span></h1><p>An online photobooth for the people<br className="desktop-break" /> you wish were right beside you.</p><a className="primary" href="#booth">Take the photos now</a><div className="hero-note"><span aria-hidden="true">♡</span> Sign in. Make a little memory.</div></div>
-        <HeroArt />
-      </section>
-      <div className="ribbon" aria-label="A moment worth keeping"><span>For the long-distance lovers</span><b aria-hidden="true"><DecorativeIcon /></b><span>The across-the-world besties</span><b aria-hidden="true"><DecorativeIcon /></b><span>The just-one-more-photo people</span><b aria-hidden="true"><DecorativeIcon /></b></div>
-      <section id="how-it-works" className="how"><div className="section-intro"><div className="eyebrow">CLOSE, IN THREE LITTLE STEPS</div><h2>A date. A catch-up.<br /><em>A reason to smile.</em></h2><p>Bring your favorite person.<br />We’ll bring the photobooth.</p></div><div className="steps"><article><span className="step-number">01</span><div><h3>Send a little invitation.</h3><p>Start a booth and share the link. Your person joins from wherever they are.</p></div><span className="step-icon" aria-hidden="true"><DecorativeIcon arrow /></span></article><article><span className="step-number">02</span><div><h3>Make a face. Make a memory.</h3><p>Pick a filter, get in frame, and let the countdown do its thing.</p></div><span className="step-icon" aria-hidden="true"><DecorativeIcon /></span></article><article><span className="step-number">03</span><div><h3>Keep a piece of together.</h3><p>Make the photocard yours. Save it, print it, or make it your new wallpaper.</p></div><span className="step-icon" aria-hidden="true">♡</span></article></div></section>
-      <section className="closing"><div className="eyebrow">THE MILES CAN WAIT A MINUTE.</div><h2>Meet me <em>in the booth.</em></h2><a className="primary" href="#booth">Take the photos now</a></section>
-      <section className="faq" id="faq" aria-labelledby="faq-title">
-        <div className="faq-intro"><div className="eyebrow">A FEW LITTLE ANSWERS</div><h2 id="faq-title">Wondering<br /><em>about something?</em></h2><p>Before you step into the booth.</p></div>
-        <div className="faq-list">
-          <details><summary>How does Together work?<span aria-hidden="true">+</span></summary><div className="faq-answer"><p>Choose Solo or Duo, pick a layout and frame, then take photos or upload favorites. In Duo camera mode, invite your person using a link or code, get both cameras ready, and take photos together. Duo uploads need no invitation: add photos for each side on your own device. Reorder your photos, choose filters, and download or print your photocard.</p></div></details>
-          <details><summary>Are my photos and data safe?<span aria-hidden="true">+</span></summary><div className="faq-answer"><p>Camera access only starts when you choose “Turn camera on.” Photos, captions, and edits stay in this browser tab; this app does not upload them. Your photocard is created on your device when you download or print it. Refreshing clears your edits. The site host and font provider may receive normal web-request information. We’ll explain live-session privacy before that feature launches.</p></div></details>
-          <details><summary>Do I need to sign up or pay?<span aria-hidden="true">+</span></summary><div className="faq-answer"><p>An account is required to enter the photobooth, including when joining a friend. Sign in or create an account before starting. Session pricing is shown in My account.</p></div></details>
-          <details><summary>Can I use it on my phone?<span aria-hidden="true">+</span></summary><div className="faq-answer"><p>Yes, Together adapts to phones, tablets, and desktops. Open your invitation in your browser and allow camera access, or choose to upload existing photos.</p></div></details>
-          <details><summary>Can I save or print my photocard?<span aria-hidden="true">+</span></summary><div className="faq-answer"><p>Yes. Choose PNG or JPG in the booth, then save your sample strip. You can keep the file, share it yourself, or print it. Your download includes the photos from your session, in the layout and style you chose.</p></div></details>
-        </div>
-      </section>
-      <footer><a className="wordmark" href="#">together<span className="brand-dot"><DecorativeIcon /></span></a><span>A little closer. Wherever you are.</span><LegalLinks /><span className="prototype-label">DESIGN PREVIEW · 2026</span></footer>
+import { useT } from '../i18n';
+import { Rich } from '../i18n/Rich';
+
+// The five questions in the FAQ, in order. Each has a 'home.faq.qN' and 'home.faq.aN' text.
+const FAQ = [1, 2, 3, 4, 5] as const;
+
+export function Home() {
+  const t = useT();
+  return <div id="home">
+    <section className="hero" aria-labelledby="hero-title">
+      <div className="hero-copy">
+        <div className="eyebrow"><span className="tiny-star"><DecorativeIcon /></span> {t('home.eyebrow')}</div>
+        <h1 id="hero-title"><Rich text={t('home.title1')} /><br /><Rich text={t('home.title2')} /><br /><span className="last-line"><Rich text={t('home.title3')} /><span className="title-star" aria-hidden="true"><DecorativeIcon /></span></span></h1>
+        <p>{t('home.lead1')}<br className="desktop-break" /> {t('home.lead2')}</p>
+        <a className="primary" href="#booth">{t('common.takePhotos')}</a>
+        <div className="hero-note"><span aria-hidden="true">♡</span> {t('home.heroNote')}</div>
+      </div>
+      <HeroArt />
+    </section>
+    <div className="ribbon" aria-label={t('home.ribbonLabel')}>
+      <span>{t('home.ribbon1')}</span><b aria-hidden="true"><DecorativeIcon /></b>
+      <span>{t('home.ribbon2')}</span><b aria-hidden="true"><DecorativeIcon /></b>
+      <span>{t('home.ribbon3')}</span><b aria-hidden="true"><DecorativeIcon /></b>
     </div>
-);}
+    <section id="how-it-works" className="how">
+      <div className="section-intro"><div className="eyebrow">{t('home.how.eyebrow')}</div><h2><Rich text={t('home.how.title')} /></h2><p><Rich text={t('home.how.lead')} /></p></div>
+      <div className="steps">
+        <article><span className="step-number">01</span><div><h3>{t('home.step1.title')}</h3><p>{t('home.step1.text')}</p></div><span className="step-icon" aria-hidden="true"><DecorativeIcon arrow /></span></article>
+        <article><span className="step-number">02</span><div><h3>{t('home.step2.title')}</h3><p>{t('home.step2.text')}</p></div><span className="step-icon" aria-hidden="true"><DecorativeIcon /></span></article>
+        <article><span className="step-number">03</span><div><h3>{t('home.step3.title')}</h3><p>{t('home.step3.text')}</p></div><span className="step-icon" aria-hidden="true">♡</span></article>
+      </div>
+    </section>
+    <section className="closing"><div className="eyebrow">{t('home.closing.eyebrow')}</div><h2><Rich text={t('home.closing.title')} /></h2><a className="primary" href="#booth">{t('common.takePhotos')}</a></section>
+    <section className="faq" id="faq" aria-labelledby="faq-title">
+      <div className="faq-intro"><div className="eyebrow">{t('home.faq.eyebrow')}</div><h2 id="faq-title"><Rich text={t('home.faq.title')} /></h2><p>{t('home.faq.lead')}</p></div>
+      <div className="faq-list">
+        {FAQ.map(n => <details key={n}><summary>{t(`home.faq.q${n}`)}<span aria-hidden="true">+</span></summary><div className="faq-answer"><p><Rich text={t(`home.faq.a${n}`)} /></p></div></details>)}
+      </div>
+    </section>
+    <footer><a className="wordmark" href="#">together<span className="brand-dot"><DecorativeIcon /></span></a><span>{t('home.footer')}</span><LegalLinks /><span className="prototype-label">© 2026 TOGETHER</span></footer>
+  </div>;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { layouts } from './core';
 import type { CardState } from './types';
+import { tm, useT, type Key } from '../i18n';
 
 /** What the popup needs to know about the unfinished booth. */
 export interface ActiveBoothInfo {
@@ -16,15 +17,8 @@ export interface ActiveBoothInfo {
   hasSavedPhotos: boolean;   // closing deletes photos saved on this device
 }
 
-const kindLabel: Record<ActiveBoothInfo['kind'], string> = {
-  'solo-camera': 'Solo, taking photos',
-  'solo-upload': 'Solo, uploading photos',
-  'duo-host': 'Duo, you created it',
-  'duo-guest': 'Duo, you joined it',
-  'duo-upload': 'Duo, uploading for both of you',
-  'solo-unknown': 'Solo',
-  'duo-unknown': 'Duo',
-};
+/** Dictionary key for each kind of booth, e.g. 'solo-camera' → "Solo, taking photos". */
+const kindLabel = (kind: ActiveBoothInfo['kind']) => `activeBooth.kind.${kind}` as Key;
 
 /** A small, tilted copy of the photo card in its real layout, with the saved photos in their slots. */
 function CardMiniature({ card, photos }: { card: CardState; photos: string[] }) {
@@ -52,6 +46,7 @@ export function ActiveBoothDialog({ open, info, continueAfterClose, busy, error,
   const ref = useRef<HTMLDialogElement>(null), firstButton = useRef<HTMLButtonElement>(null);
   const id = useId();
   const [confirming, setConfirming] = useState(false);
+  const t = useT();
   useEffect(() => {
     const dialog = ref.current;
     if (open && dialog && !dialog.open) { setConfirming(false); dialog.showModal(); }
@@ -62,20 +57,20 @@ export function ActiveBoothDialog({ open, info, continueAfterClose, busy, error,
   useEffect(() => { if (open) firstButton.current?.focus(); }, [open, confirming, info?.ended]);
   if (!info) return <dialog ref={ref} className="leave-dialog active-booth-dialog" />;
 
-  const closeLabel = continueAfterClose ? 'Close it and continue' : 'Close it and start new';
+  const closeLabel = t(continueAfterClose ? 'activeBooth.closeContinue' : 'activeBooth.closeNew');
   // Closing straight away is safe when nothing would be deleted; otherwise confirm first.
   const askToClose = () => { if (info.hasSavedPhotos) setConfirming(true); else onClose(); };
 
   let title: string, lead: string;
   if (confirming) {
-    title = 'Close this booth?';
-    lead = `${info.hasSavedPhotos ? 'The photos saved for it on this device will be deleted. ' : ''}${info.guest ? 'Nothing is charged to you.' : 'Nothing has been charged for it.'}`;
+    title = t('activeBooth.confirm.title');
+    lead = `${info.hasSavedPhotos ? t('activeBooth.confirm.photos') + ' ' : ''}${t(info.guest ? 'activeBooth.confirm.guest' : 'activeBooth.confirm.host')}`;
   } else if (info.ended) {
-    title = 'Your last booth has closed';
-    lead = 'The duo room ended, but its hold is still stopping a new booth from starting. Release it to carry on. Nothing was charged.';
+    title = t('activeBooth.ended.title');
+    lead = t('activeBooth.ended.text');
   } else {
-    title = 'Your booth is still open';
-    lead = 'Pick up where you left off, or close it to start a new one.';
+    title = t('progress.booth.title');
+    lead = t('activeBooth.open.text');
   }
 
   return <dialog ref={ref} className="leave-dialog active-booth-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-lead`} aria-busy={busy} onCancel={event => event.preventDefault()}>
@@ -84,24 +79,24 @@ export function ActiveBoothDialog({ open, info, continueAfterClose, busy, error,
     <p id={`${id}-lead`} className="active-booth-lead">{lead}</p>
 
     {!confirming && !info.ended && <dl className="active-booth-facts">
-      <div><dt>Booth</dt><dd>{kindLabel[info.kind]}</dd></div>
-      {info.roomCode && <div><dt>Room code</dt><dd className="active-booth-code">{info.roomCode}</dd></div>}
-      <div><dt>Photos</dt><dd>{info.total ? `${info.saved || 0} of ${info.total} saved on this device` : info.kind === 'duo-guest' ? 'Shared again when you reconnect' : 'Not saved on this device'}</dd></div>
-      {info.heldUntil && <div><dt>Held until</dt><dd>{info.heldUntil}</dd></div>}
-      {!info.heldUntil && info.lastSaved && <div><dt>Last saved</dt><dd>{info.lastSaved}</dd></div>}
-      <div><dt>Cost</dt><dd>{info.guest ? 'Covered by your creator' : 'Nothing charged yet'}</dd></div>
+      <div><dt>{t('activeBooth.booth')}</dt><dd>{t(kindLabel(info.kind))}</dd></div>
+      {info.roomCode && <div><dt>{t('activeBooth.roomCode')}</dt><dd className="active-booth-code">{info.roomCode}</dd></div>}
+      <div><dt>{t('activeBooth.photos')}</dt><dd>{info.total ? t('activeBooth.photosSaved', { saved: info.saved || 0, total: info.total }) : t(info.kind === 'duo-guest' ? 'activeBooth.photosShared' : 'activeBooth.photosNone')}</dd></div>
+      {info.heldUntil && <div><dt>{t('activeBooth.heldUntil')}</dt><dd>{info.heldUntil}</dd></div>}
+      {!info.heldUntil && info.lastSaved && <div><dt>{t('activeBooth.lastSaved')}</dt><dd>{info.lastSaved}</dd></div>}
+      <div><dt>{t('activeBooth.cost')}</dt><dd>{t(info.guest ? 'activeBooth.costGuest' : 'activeBooth.costHost')}</dd></div>
     </dl>}
 
-    {error && <p role="alert" className="room-error">{error}</p>}
+    {error && <p role="alert" className="room-error">{tm(error)}</p>}
 
     <div className="active-booth-actions">
       {confirming ? <>
-        <button ref={firstButton} className="primary" disabled={busy} onClick={onClose}>{busy ? 'Closing…' : 'Yes, close it'}</button>
-        <button className="outline-button" disabled={busy} onClick={() => setConfirming(false)}>Keep my booth</button>
+        <button ref={firstButton} className="primary" disabled={busy} onClick={onClose}>{busy ? t('activeBooth.closing') : t('activeBooth.yesClose')}</button>
+        <button className="outline-button" disabled={busy} onClick={() => setConfirming(false)}>{t('activeBooth.keep')}</button>
       </> : info.ended ? <>
-        <button ref={firstButton} className="primary" disabled={busy} onClick={onClose}>{busy ? 'Releasing…' : continueAfterClose ? 'Release it and continue' : 'Release it'}</button>
+        <button ref={firstButton} className="primary" disabled={busy} onClick={onClose}>{busy ? t('activeBooth.releasing') : t(continueAfterClose ? 'activeBooth.releaseContinue' : 'activeBooth.release')}</button>
       </> : <>
-        <button ref={firstButton} className="primary" disabled={busy} onClick={onResume}>{busy ? 'Opening your booth…' : 'Go back to my booth'}</button>
+        <button ref={firstButton} className="primary" disabled={busy} onClick={onResume}>{busy ? t('activeBooth.opening') : t('progress.booth.button')}</button>
         <button className="outline-button" disabled={busy} onClick={askToClose}>{closeLabel}</button>
       </>}
     </div>

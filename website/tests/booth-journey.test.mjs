@@ -12,6 +12,12 @@ import {reconcileOffsets} from '../src/booth/photoPosition.js';
 const compiled=ts.transpileModule(await readFile(new URL('../src/booth/Booth.tsx',import.meta.url),'utf8'),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022},
 }).outputText;
+// English words for the booth, with the same {placeholder} filling as src/i18n/index.ts.
+const enSource=ts.transpileModule(await readFile(new URL('../src/i18n/en.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const enModule={exports:{}};runInNewContext(enSource,{exports:enModule.exports,module:enModule});
+const en=enModule.exports.en;
+const t=(key,vars)=>{const text=en[key]??key;return vars?text.replace(/\{(\w+)\}/g,(m,k)=>k in vars?String(vars[k]):m):text;};
+const i18n={t,useT:()=>t,tm:message=>message,formatTime:value=>new Date(value).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'})};
 function harness({cost=100,role='host',invite=null,user=null,draft=null,storageFailure=false,active=null,server=null,roomGone=false,partnerOnline=true,mine=null}={}) {
   const store={active,activeSaves:[]}, adopted=[], released=[], adoptedRooms=[], resumed=[], joins=[];
   class RoomRequestError extends Error{constructor(message,status=0){super(message);this.status=status;}}
@@ -40,6 +46,7 @@ function harness({cost=100,role='host',invite=null,user=null,draft=null,storageF
       readActiveSession:async()=>store.active,deleteActiveSession:async()=>{store.active=null;},saveActiveSession:async(_,record)=>{if(storageFailure)throw Error('Storage full');store.active=record;store.activeSaves.push(record);}};
     if(name==='react/jsx-runtime')return{jsx:(type,props)=>({type,props}),jsxs:(type,props)=>({type,props}),Fragment:'Fragment'};
     if(name==='./core')return core;
+    if(name==='../i18n')return i18n;
     if(name==='./photoPosition.js')return{reconcileOffsets};
     if(name==='./frameAssets')return{prefetchFrames:()=>()=>{}};
     if(name==='../components/useStepHistory')return{useStepHistory:()=>{}};
@@ -93,9 +100,9 @@ test('opted-in recovery failure blocks deduction while preserving photos',async(
  const ui=harness({user:{id:'alice'},storageFailure:true});await ui.start();
  ui.find('input',p=>p.type==='checkbox').onChange({target:{checked:true}});
  ui.find('UploadScreen').onPhotos(['one','two','three']);ui.find('UploadScreen').onNext();await ui.flush();
- ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').onConfirm();await ui.flush();
+ ui.find('BoothDialog',p=>p.title==='Ready to start editing?').onConfirm();await ui.flush();
  assert.equal(ui.debits(),0);assert.equal(ui.find('EditScreen'),undefined);
- assert.match(ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').error,/Recovery could not be saved/);
+ assert.match(ui.find('BoothDialog',p=>p.title==='Ready to start editing?').error,/Recovery could not be saved/);
  assert.equal(ui.find('UploadScreen').card.shots.length,3);
 });
 
@@ -133,11 +140,11 @@ test('expired invite stays on join screen with error instead of entering a room'
 test('solo upload follows source/layout/capture/confirmation/design/export without early deduction', async()=>{
   const ui=harness(); await ui.start();
   ui.find('UploadScreen').onPhotos(['one','two','three']);ui.find('UploadScreen').onNext();await ui.flush();
-  let modal=ui.find('BoothDialog',p=>p.title==='Proceed to Editing?');
+  let modal=ui.find('BoothDialog',p=>p.title==='Ready to start editing?');
   assert.equal(modal.open,true);assert.equal(ui.debits(),0);assert.equal(ui.find('EditScreen'),undefined);
   modal.onCancel();await ui.flush();assert.ok(ui.find('UploadScreen'));assert.equal(ui.debits(),0);
   ui.find('UploadScreen').onNext();await ui.flush();
-  modal=ui.find('BoothDialog',p=>p.title==='Proceed to Editing?');modal.onConfirm();modal.onConfirm();await ui.flush();
+  modal=ui.find('BoothDialog',p=>p.title==='Ready to start editing?');modal.onConfirm();modal.onConfirm();await ui.flush();
   assert.equal(ui.debits(),1);assert.equal(ui.find('EditScreen'),undefined);
   ui.commit();await ui.flush();
   const editor=ui.find('EditScreen');assert.equal(editor.stage,'design');assert.equal(editor.card.shots.length,3);
@@ -149,8 +156,8 @@ test('Duo uploads skip invitations and use the same free-trial confirmation boun
   const ui=harness({cost:0});await ui.start('duo','upload');
   assert.ok(ui.find('DuoUploadScreen'));assert.equal(ui.party.room,null);
   ui.find('DuoUploadScreen').onNext(['pair1','pair2','pair3']);await ui.flush();
-  const modal=ui.find('BoothDialog',p=>p.title==='Proceed to Editing?');
-  assert.equal(modal.confirmLabel,'Confirm & Use Free Trial');assert.equal(ui.debits(),0);
+  const modal=ui.find('BoothDialog',p=>p.title==='Ready to start editing?');
+  assert.equal(modal.confirmLabel,'Use my free session');assert.equal(ui.debits(),0);
   modal.onConfirm();await ui.flush();ui.commit();await ui.flush();assert.equal(ui.find('EditScreen').stage,'design');
 });
 
@@ -159,7 +166,7 @@ test('last camera shot never auto-debits; explicit confirmation precedes editing
   for(let i=0;i<3;i++){ui.find('SessionScreen').onShot(i,'photo'+i);await ui.flush();}
   assert.equal(ui.debits(),0);assert.equal(ui.find('EditScreen'),undefined);
   const permitted=ui.find('SessionScreen').beforeReview();await ui.flush();
-  ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').onConfirm();await ui.flush();
+  ui.find('BoothDialog',p=>p.title==='Ready to start editing?').onConfirm();await ui.flush();
   assert.equal(ui.find('EditScreen'),undefined);ui.commit();assert.equal(await permitted,true);
   ui.find('SessionScreen').onNext(true);assert.equal(ui.find('EditScreen').stage,'design');
 });
@@ -171,8 +178,8 @@ for(const role of ['host','guest'])test(`Duo ${role} exit is confirmed even with
   leave.onCancel();assert.ok(ui.find('SessionScreen'));assert.ok(ui.party.room);
   ui.find('SessionScreen').onPartnerConnection(true);ui.render();
   ui.find('SessionScreen').onPartnerConnection(false);ui.render();
-  const lost=ui.find('BoothDialog',p=>p.title==='Partner Disconnected');assert.equal(lost.open,true);
-  lost.onCancel();assert.equal(ui.find('BoothDialog',p=>p.title==='Partner Disconnected').open,false);
+  const lost=ui.find('BoothDialog',p=>p.title==='Your person got disconnected');assert.equal(lost.open,true);
+  lost.onCancel();assert.equal(ui.find('BoothDialog',p=>p.title==='Your person got disconnected').open,false);
   assert.ok(ui.find('SessionScreen'));assert.ok(ui.party.room);assert.equal(ui.debits(),0);
   ui.find('SessionScreen').onBack();ui.find('LeaveDialog').onConfirm();assert.equal(ui.party.room,null);
 });
@@ -182,22 +189,22 @@ test('Duo guest enters shared editing without a debit or a payment dialog',async
   ui.find('SessionScreen').onSharedPhotos(['one','two','three']);
   ui.find('SessionScreen').onNext(true); // Host's confirmed edit event.
   assert.equal(ui.find('EditScreen').stage,'design');assert.equal(ui.debits(),0);
-  assert.equal(ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').open,false);
+  assert.equal(ui.find('BoothDialog',p=>p.title==='Ready to start editing?').open,false);
 });
 
 test('disconnect acknowledgement resets after reconnect and room expiry also opens the dialog',async()=>{
   const ui=harness();await ui.start('duo','camera');
   ui.find('SessionScreen').onPartnerConnection(true);ui.render();
   ui.find('SessionScreen').onPartnerConnection(false);ui.render();
-  ui.find('BoothDialog',p=>p.title==='Partner Disconnected').onCancel();ui.render();
+  ui.find('BoothDialog',p=>p.title==='Your person got disconnected').onCancel();ui.render();
   ui.find('SessionScreen').onPartnerConnection(true);ui.render();
   ui.find('SessionScreen').onPartnerConnection(false);ui.render();
-  assert.equal(ui.find('BoothDialog',p=>p.title==='Partner Disconnected').open,true);
-  ui.find('BoothDialog',p=>p.title==='Partner Disconnected').onCancel();
+  assert.equal(ui.find('BoothDialog',p=>p.title==='Your person got disconnected').open,true);
+  ui.find('BoothDialog',p=>p.title==='Your person got disconnected').onCancel();
   ui.find('SessionScreen').onPartnerConnection(true);ui.render();
   ui.party.ended=true;
-  assert.equal(ui.find('BoothDialog',p=>p.title==='Partner Disconnected').open,true);
-  ui.find('BoothDialog',p=>p.title==='Partner Disconnected').onConfirm();
+  assert.equal(ui.find('BoothDialog',p=>p.title==='Your person got disconnected').open,true);
+  ui.find('BoothDialog',p=>p.title==='Your person got disconnected').onConfirm();
   assert.ok(ui.find('ModeScreen'));assert.equal(ui.party.room,null);
 });
 
@@ -242,7 +249,7 @@ test('confirming editing replaces the pre-edit record with the editing draft',as
  const ui=harness({user:{id:'alice'}});await ui.start('solo','upload');
  ui.find('UploadScreen').onPhotos(['one','two','three']);await ui.flush();assert.ok(ui.store.active);
  ui.find('UploadScreen').onNext();await ui.flush();
- ui.find('BoothDialog',p=>p.title==='Proceed to Editing?').onConfirm();await ui.flush();ui.commit();await ui.flush();
+ ui.find('BoothDialog',p=>p.title==='Ready to start editing?').onConfirm();await ui.flush();ui.commit();await ui.flush();
  assert.ok(ui.find('EditScreen'));assert.equal(ui.store.active,null);assert.equal(ui.debits(),1);
 });
 test('points errors still show the top-up link',async()=>{
