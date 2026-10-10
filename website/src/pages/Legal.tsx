@@ -8,7 +8,7 @@ import { LEGAL_LANGUAGES, LANG_ORDER, type LangCode, type PageId } from './legal
 // ---------------------------------------------------------------------------
 export const LAST_UPDATED = '2026-10-10'; // year-month-day; shown in each language's date style
 const OPERATOR = 'Zwe Lin Naing';
-const CONTACT = 'zwelinnaing34@gmail.com';
+const CONTACT = 'togetherphotobooth.xyz@gmail.com';
 const STORAGE_KEY = 'together.legalLang';
 const PAGES: PageId[] = ['terms', 'privacy', 'refunds'];
 
