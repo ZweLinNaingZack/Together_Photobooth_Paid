@@ -46,7 +46,7 @@ The git repo root is this folder. The app lives in `website/`:
 ```
 pnpm install        # first time / after pulling
 pnpm dev            # local preview (http://localhost:5173)
-pnpm test           # all tests (should be 135 passing)
+pnpm test           # all tests (should be 162 passing)
 npx tsc --noEmit    # type check
 pnpm build          # production build
 ```
@@ -92,13 +92,14 @@ Before saying a change is done: type check + tests + build must pass.
 
 ## Status / open items (as of 11 Oct 2026)
 
+Done: legal + contact pages on master; translations pushed to staging (commit 8e6190b);
+new admin email switch finished; production Vercel functions run in sin1 (Singapore), same as Supabase.
+
 Check with me which of these are done:
-1. Push + test on staging, then merge to master: legal pages, contact page, translations.
-2. New admin email: sign up with togetherphotobooth.xyz@gmail.com, run `020-new-admin-email.sql`
-   on production, set Vercel `ADMIN_EMAIL` and `SUPPORT_EMAIL`, redeploy; later remove old admin.
+1. Translations need some fixes (owner will list them), then merge staging → master.
+2. Later: remove the old admin (last commented line in `020-new-admin-email.sql`).
 3. Native speakers should proofread `my.ts` / `vi.ts` (Burmese font couldn't be checked in the cloud).
 4. Change `LAST_UPDATED` in `src/pages/Legal.tsx` on launch day; get policies reviewed.
-5. Confirm production Vercel function region matches Supabase.
-6. Before launch: Vercel Pro (Hobby is non-commercial), Supabase Pro (backups), make repo private,
+5. Before launch: Vercel Pro (Hobby is non-commercial), Supabase Pro (backups), make repo private,
    remove committed `node_modules`, error alerts.
-7. Optional: Server-Timing in the room API, H.264 preference, `replaceTrack` camera switch.
+6. Optional: Server-Timing in the room API, H.264 preference, `replaceTrack` camera switch.
