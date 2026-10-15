@@ -79,7 +79,7 @@ Before saying a change is done: type check + tests + build must pass.
   filter, points, session, upload, download, link, code, account). Policies stay formal.
 - **When adding UI text, add it to all three files.** The language button is `components/LanguageSwitcher.tsx`.
 - Policy pages use `src/pages/legalText.ts` (also 3 languages). Change rules in all three.
-- First visit follows the phone language; a choice is saved in localStorage `together.lang`.
+- First visit is always English (not the phone language); a choice is saved in localStorage `together.lang`.
 
 ## Business rules (don't break these)
 

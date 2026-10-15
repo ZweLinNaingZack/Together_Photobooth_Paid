@@ -7,8 +7,8 @@
 // - Components call useT() (or useLang()) so they redraw when the language changes.
 // - English always loads. Burmese and Vietnamese download only when someone picks them,
 //   so English visitors don't pay for the extra text.
-// - First visit: we follow the phone/browser language. A choice made with the
-//   language button is remembered on this device.
+// - First visit is always English. A choice made with the language button is
+//   remembered on this device.
 // ---------------------------------------------------------------------------
 import { useSyncExternalStore } from 'react';
 import { en, type Key } from './en';
@@ -31,19 +31,12 @@ const listeners = new Set<() => void>();
 
 const isLang = (value: unknown): value is Lang => value === 'en' || value === 'my' || value === 'vi';
 
-/** Saved choice first, then the phone/browser language, then English. */
+/** The language this device chose before (with the language button), otherwise English. */
 export function detectLang(): Lang {
   try {
     const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(OLD_POLICY_KEY);
     if (isLang(saved)) return saved;
-  } catch { /* storage blocked (private window): just detect */ }
-  const wanted = typeof navigator === 'undefined' ? [] : navigator.languages?.length ? navigator.languages : [navigator.language];
-  for (const tag of wanted) {
-    const code = String(tag || '').toLowerCase();
-    if (code.startsWith('my')) return 'my';   // Burmese: "my", "my-MM"
-    if (code.startsWith('vi')) return 'vi';   // Vietnamese: "vi", "vi-VN"
-    if (code.startsWith('en')) return 'en';
-  }
+  } catch { /* storage blocked (private window): use English */ }
   return 'en';
 }
 
