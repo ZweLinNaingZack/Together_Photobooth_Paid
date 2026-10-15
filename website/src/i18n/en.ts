@@ -335,6 +335,7 @@ export const en = {
   'mode.duo.title': "Duo booth",
   'mode.duo.text': "Create a booth and invite your person, or join with their party code. Take photos together live, or upload photos for both sides yourself.",
   'mode.duo.action': "Create or join a booth",
+  'mode.duo.badge': "Recommended",
 
   // ---- Booth: photo source ----
   'source.eyebrow.duo': "YOUR SHARED KEEPSAKE",
@@ -631,7 +632,6 @@ export const en = {
   'session.manualHelp': "One tap takes one photo, no countdown.",
   'session.timerHelp': "A {n}-second countdown before each photo left.",
   'session.eyebrow': "NOW, YOUR LITTLE MOMENT",
-  'session.title': "A smile. A silly face. *You.*",
   'session.note': "Your favorite moments, at your own pace.",
   'session.duoBar': "Together · live cameras",
   'session.soloBar': "Your live camera",

@@ -9,6 +9,16 @@ import { LANGUAGES, setLang, useLang, useT } from '../i18n';
 export function LanguageSwitcher() {
   const lang = useLang(), t = useT();
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false);
+  // Which way the menu opens. Normally it lines up with the button's right edge and grows left.
+  // On phones the button wraps to the left edge of the screen, so growing left would push the
+  // menu off-screen. Then we line it up with the button's left edge instead.
+  const [alignLeft, setAlignLeft] = useState(false);
+
+  function toggle() {
+    const rect = button.current?.getBoundingClientRect();
+    if (rect) setAlignLeft(rect.right < 230); // 230px ≈ the menu's width plus a small margin
+    setOpen(value => !value);
+  }
   const box = useRef<HTMLDivElement>(null), button = useRef<HTMLButtonElement>(null);
   const currentLang = LANGUAGES.find(item => item.code === lang)!;
 
@@ -31,13 +41,13 @@ export function LanguageSwitcher() {
 
   return <div className="lang-switch" ref={box}>
     <button ref={button} type="button" className="lang-button" aria-haspopup="true" aria-expanded={open}
-      aria-label={`${t('nav.language')}: ${currentLang.label}`} onClick={() => setOpen(value => !value)}>
+      aria-label={`${t('nav.language')}: ${currentLang.label}`} onClick={toggle}>
       {/* Simple globe icon */}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" /></svg>
       <span lang={currentLang.locale}>{currentLang.short}</span>
       <svg className="lang-caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" /></svg>
     </button>
-    {open && <div className="lang-menu" role="menu" aria-label={t('nav.language')}>
+    {open && <div className={`lang-menu${alignLeft ? ' align-left' : ''}`} role="menu" aria-label={t('nav.language')}>
       {LANGUAGES.map(item => <button key={item.code} type="button" role="menuitemradio" aria-checked={item.code === lang} disabled={busy}
         onClick={() => void choose(item.code)}>
         <span className="lang-name" lang={item.locale}>{item.label}</span>

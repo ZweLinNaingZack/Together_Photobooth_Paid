@@ -20,7 +20,6 @@ import {createDuoCaptures} from './duoCaptures.mjs';
 import {diagnosticReport} from './diagnostics.js';
 import {unlockCameraSound,cameraSound} from './cameraSounds.js';
 import { tm, useT, type Key } from '../i18n';
-import { Rich } from '../i18n/Rich';
 import { layoutName, layoutNote } from '../i18n/layouts';
 
 interface Props {
@@ -224,7 +223,7 @@ export function SessionScreen(props: Props) {
     }
   }
   const defaultStatus = retake !== null ? t('session.retaking', { n: retake + 1 }) : complete ? t('session.allReady') : method === 'manual' ? t('session.manualHelp') : t('session.timerHelp', { n: seconds });
-  return <><Heading eyebrow={t('session.eyebrow')} title={<Rich text={t('session.title')} />} note={`${layoutName(layout)} · ${layoutNote(layout)}. ${t('session.note')}`} />
+  return <><Heading eyebrow={t('session.eyebrow')} note={`${layoutName(layout)} · ${layoutNote(layout)}. ${t('session.note')}`} />
     <div className="session-surface"><div className="session-bar"><span>{t(duo ? 'session.duoBar' : 'session.soloBar')}</span><div className="session-tools"><button className="mirror-toggle" aria-pressed={sound} onClick={()=>{unlockCameraSound();setSound(value=>!value);}}>{t('session.sound', { state: t(sound ? 'common.on' : 'common.off') })}</button><button type="button" className={`mirror-toggle ${props.mirror ? 'enabled' : ''}`} aria-pressed={props.mirror} disabled={locked || !stream} onClick={() => props.onMirrorChange(!props.mirror)}>{t('session.mirror', { state: t(props.mirror ? 'common.on' : 'common.off') })}</button><button className="text-button" id="camera-toggle" disabled={locked} onClick={()=>void toggleCamera()}>{t(stream ? 'session.cameraOff' : 'session.cameraOn')}</button></div></div>
       <div style={{aspectRatio:String(photoRatio),maxHeight:'none',maxWidth:`min(100%, ${photoRatio*55}svh)`,marginInline:'auto'}} className={`session-view ${duo ? 'duo-live-view' : 'solo-live-view'}`} ref={view}>
         <div className="camera-pane" style={{ order: guest ? 1 : 0 }}><video ref={video} id="live-camera" aria-label={t('session.soloBar')} className={props.mirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setVideoReady(true)} onEmptied={() => setVideoReady(false)} hidden={!stream} />{(!stream || !videoReady) && <div className="camera-placeholder"><span aria-hidden="true">◎</span><strong>{t(pending ? 'session.opening' : 'session.isOff')}</strong><p>{t(pending ? 'session.allowToJoin' : 'session.turnOn')}</p></div>}<span className="camera-name">{t('room.you')}</span></div>

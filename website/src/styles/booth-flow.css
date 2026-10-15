@@ -113,3 +113,8 @@ body h1 em,body h2 em{font-weight:500}
 .camera-card-preview summary { cursor: pointer; }
 .camera-card-preview img { display: block; max-height: 420px; max-width: 100%; margin: 16px auto; }
 .camera-card-preview p { font-size: 14px; color: var(--muted); }
+
+/* "Recommended" badge on the Duo booth card (top right corner). */
+.mode-option { position: relative; }
+.mode-badge { position: absolute; top: 20px; right: 20px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--red); color: #fff8ee; font-size: 12px; font-weight: 600; line-height: 1.4; }
+@media (max-width: 520px) { .mode-badge { top: 16px; right: 16px; padding: 5px 10px; font-size: 11px; } }

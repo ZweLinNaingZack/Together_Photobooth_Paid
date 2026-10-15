@@ -9,7 +9,10 @@ export function ModeScreen({ onChoose }: { onChoose: (mode: BoothMode) => void }
   return <><Heading eyebrow={t('mode.eyebrow')} title={<Rich text={t('mode.title')} />} note={t('mode.note')} />
     <div className="mode-options">
       <button className="mode-option solo-option" onClick={() => onChoose('solo')}><span className="mode-icon" aria-hidden="true">♡</span><span className="eyebrow">{t('mode.solo.eyebrow')}</span><strong>{t('mode.solo.title')}</strong><p>{t('mode.solo.text')}</p><span className="mode-action">{t('mode.solo.action')}</span></button>
-      <button className="mode-option duo-option" onClick={() => onChoose('duo')}><span className="mode-icon" aria-hidden="true">♡ ♡</span><span className="eyebrow">{t('mode.duo.eyebrow')}</span><strong>{t('mode.duo.title')}</strong><p>{t('mode.duo.text')}</p><span className="mode-action">{t('mode.duo.action')}</span></button>
+      <button className="mode-option duo-option" onClick={() => onChoose('duo')}>
+        {/* "Recommended" badge in the top corner: Duo is the main thing Together is made for. */}
+        <span className="mode-badge"><span aria-hidden="true">★</span>{t('mode.duo.badge')}</span>
+        <span className="mode-icon" aria-hidden="true">♡ ♡</span><span className="eyebrow">{t('mode.duo.eyebrow')}</span><strong>{t('mode.duo.title')}</strong><p>{t('mode.duo.text')}</p><span className="mode-action">{t('mode.duo.action')}</span></button>
     </div>
   </>;
 }

@@ -169,6 +169,9 @@ body,button,input,select,textarea{font-family:var(--sans)}
 .lang-caret{transition:transform .2s}.lang-button[aria-expanded=true] .lang-caret{transform:rotate(180deg)}
 /* The menu drops down under the button, aligned to its right edge so it never leaves the screen. */
 .lang-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:50;min-width:200px;padding:6px;background:#fffdf8;border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(38,42,39,.14);display:grid;gap:2px;animation:rise .18s ease both}
+/* Opens to the right when the button sits at the left edge (phones). Never wider than the screen. */
+.lang-menu.align-left{left:0;right:auto}
+.lang-menu{max-width:calc(100vw - 32px)}
 .lang-menu button{display:grid;grid-template-columns:1fr auto;align-items:center;text-align:start;gap:0 10px;padding:10px 12px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;cursor:pointer}
 .lang-menu button:hover{background:#f3efe4}
 .lang-menu button[aria-checked=true]{background:#f3efe4}
