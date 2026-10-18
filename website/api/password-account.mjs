@@ -16,7 +16,13 @@ export function makeAccountHandler({env=process.env,fetcher=fetch}={}) {return a
   const response=await fetcher(endpoint,{method:signup?'POST':'PUT',headers:{apikey:key,'Content-Type':'application/json',...(!signup?{Authorization:authorization}:{})},body:JSON.stringify(signup?{email:email.trim(),password,gotrue_meta_security:{captcha_token:captchaToken}}:{password}),signal:AbortSignal.timeout(15000)});
   const data=await response.json();
   if(!response.ok)return res.status(response.status).json({code:data.error_code||data.code||'account_request_failed'});
-  // Do not return provider user details, or reveal whether a signup email exists.
+  // An email that already has a confirmed account: Supabase still answers "OK" (and sends no email),
+  // but the user it returns has an empty `identities` list. Tell the person to sign in instead of
+  // waiting for an email that will never come. (An unconfirmed account still has an identity, and
+  // Supabase re-sends its confirmation email, so "check your inbox" stays correct for it.)
+  const user=signup?(data.user||data):null;
+  if(user&&Array.isArray(user.identities)&&user.identities.length===0)return res.status(409).json({code:'user_already_exists'});
+  // Never pass the provider's user details back to the browser.
   return res.status(200).json({ok:true});
  }catch{return res.status(503).json({code:'service_unavailable'});}
 };}

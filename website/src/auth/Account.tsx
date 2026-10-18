@@ -2,7 +2,7 @@ import { WarningNotice } from '../components/WarningNotice';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from './AuthProvider';
-import { authRedirect, googleAvailable, supabase } from './client';
+import { authRedirect, googleAvailable, incomingEmailLink, supabase } from './client';
 import './account.css';
 import { authErrorMessage } from './errors';
 import { Wallet } from './Wallet';
@@ -59,8 +59,10 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
       } else if (mode === 'signup') {
         const response=await fetch('/api/password-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'signup',email:email.trim(),password,captchaToken})});
         const result=await response.json();
-        setPassword('');
+        // Keep the typed password on errors (e.g. "already have an account", "too many tries")
+        // so the person can switch to Sign in or retry without typing it again.
         if (!response.ok) { setError(authErrorMessage({code:result.code,status:response.status})); return; }
+        setPassword('');
         setMessage(t('account.signupSent'));
       } else {
         const response = await fetch('/api/password-login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:email.trim(),password,captchaToken})});
@@ -75,7 +77,11 @@ export function Account({ page = 'overview' }: { page?: 'overview' | 'buy' | 'ad
     setCaptchaToken(''); setCaptchaAttempt(n => n+1);
   }
   const update = recovery && Boolean(user);
-  if(emailLink)return <section className="account-page"><div className="account-panel"><h1>{t('account.link.title')}</h1><p>{t('account.link.text')}</p><button className="primary" disabled={busy||loading} onClick={()=>void run(verifyEmailLink)}>{busy?t('account.link.verifying'):t('account.link.verify')}</button>{(error||initialError)&&<WarningNotice>{error||initialError}</WarningNotice>}<a className="text-button" href="/#account" onClick={e=>{e.preventDefault();location.replace('/#account');location.reload();}}>{t('account.backToSignIn')}</a></div></section>;
+  // Opened from an email link. The account is only confirmed when this button is tapped
+  // (email apps that pre-open links to scan them can't use up the link by accident).
+  // Sign-up and password-reset links get their own wording so people know what the tap does.
+  const resetLink = incomingEmailLink?.type === 'recovery';
+  if(emailLink)return <section className="account-page"><div className="account-panel"><h1>{t(resetLink ? 'account.link.resetTitle' : 'account.link.title')}</h1><p>{t(resetLink ? 'account.link.resetText' : 'account.link.text')}</p><button className="primary" disabled={busy||loading} onClick={()=>void run(verifyEmailLink)}>{busy?t('account.link.verifying'):t(resetLink ? 'account.link.resetVerify' : 'account.link.verify')}</button>{(error||initialError)&&<WarningNotice>{error||initialError}</WarningNotice>}<a className="text-button" href="/#account" onClick={e=>{e.preventDefault();location.replace('/#account');location.reload();}}>{t('account.backToSignIn')}</a></div></section>;
   if (user && !update) return <GoogleAccount page={page} />;
   const returnTo = readBoothReturn() || '#booth';
   return <section className="account-page" aria-labelledby="account-title">

@@ -22,7 +22,7 @@ Together Photobooth (https://togetherphotobooth.xyz) is a browser-based photoboo
 - **Payments:** Manual admin approval of KBZPay top-ups (7,000 MMK = 100 points). One booth session costs 100 points (free session first). In duo, only the host pays. Admin = row in `together_admins` (by user id).
 - **Accounts:** Gmail addresses only (sign-up hook from migration 007), Google sign-in or email/password with email confirmation.
 - **Device recovery:** IndexedDB holds the paid editing draft (key = user id) and the active pre-edit "Your photos" session (key = `<user id>:active`). Neither is cloud photo storage.
-- **Tests:** Node's test runner (162 tests incl. PGlite SQL tests); Playwright real-WebRTC duo browser tests (run with `pnpm dev` running); k6 load test in `website/load/` against staging.
+- **Tests:** Node's test runner (163 tests incl. PGlite SQL tests); Playwright real-WebRTC duo browser tests (run with `pnpm dev` running); k6 load test in `website/load/` against staging.
 
 ## Key design decisions
 

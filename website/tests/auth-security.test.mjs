@@ -37,6 +37,16 @@ test('strong signup preserves CAPTCHA and update requires a session',async()=>{
  assert.equal(res.statusCode,200);assert.deepEqual(body.gotrue_meta_security,{captcha_token:'captcha'});assert.deepEqual(res.body,{ok:true});
  await handler({method:'POST',headers:{},body:{operation:'update',password:'Abcdefg1!'}},res);assert.equal(res.statusCode,401);
 });
+test('signup with an email that already has an account says so instead of "check your inbox"',async()=>{
+ const env={SUPABASE_URL:'https://project.test',VITE_SUPABASE_PUBLISHABLE_KEY:'public',SITE_URL:'https://site.test'};
+ const request={method:'POST',headers:{},body:{operation:'signup',email:'alice@gmail.com',password:'Abcdefg1!',captchaToken:'captcha'}};
+ const respond=identities=>makeAccountHandler({env,fetcher:async()=>({ok:true,json:async()=>({id:'private',identities})})});
+ const res={setHeader(){},status(n){this.statusCode=n;return this;},json(value){this.body=value;return this;}};
+ // Confirmed account: Supabase returns a user with no identities and sends no email.
+ await respond([])(request,res);assert.equal(res.statusCode,409);assert.deepEqual(res.body,{code:'user_already_exists'});
+ // New or still-unconfirmed account: a confirmation email is on its way.
+ await respond([{provider:'email'}])(request,res);assert.equal(res.statusCode,200);assert.deepEqual(res.body,{ok:true});
+});
 import ts from 'typescript';
 test('auth templates render branded verification and recovery with escaped links',async()=>{
  const source=await readFile(new URL('../supabase/functions/auth-email/template.ts',import.meta.url),'utf8');

@@ -46,7 +46,7 @@ The git repo root is this folder. The app lives in `website/`:
 ```
 pnpm install        # first time / after pulling
 pnpm dev            # local preview (http://localhost:5173)
-pnpm test           # all tests (should be 162 passing)
+pnpm test           # all tests (should be 163 passing)
 npx tsc --noEmit    # type check
 pnpm build          # production build
 ```
