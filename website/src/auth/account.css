@@ -166,3 +166,53 @@
 .booth-progress-card p{margin:0;color:var(--muted);line-height:1.6}
 .booth-progress-card .primary{flex-shrink:0}
 @media(max-width:600px){.booth-progress-card{flex-direction:column;align-items:stretch}}
+
+/* ---- Sign in / sign up / email link screens (tidied 19 Oct 2026) ---- */
+/* The small heading is a flex row, so it needs its own centring to line up with the title. */
+.account-page>.eyebrow{justify-content:center}
+.account-page>h1{margin:16px 0 12px}
+
+/* Google button: white card with the coloured G, clearly a button but calmer than the red one. */
+.account-google{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 18px;border:1px solid #c9ccc0;border-radius:8px;background:#fffdf8;color:var(--ink);font:inherit;font-size:16px;font-weight:600;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.account-google:hover:not(:disabled){border-color:var(--ink);box-shadow:0 2px 8px #25282314}
+
+/* Red text links: "Create an account", "Forgot your password?", "Resend it", "Back to sign in". */
+.text-link{border:0;background:none;padding:0;font:inherit;font-weight:650;color:var(--red);cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color .2s}
+.text-link:hover:not(:disabled){text-decoration-color:currentColor}
+.text-link:disabled{opacity:.5;cursor:default}
+
+/* Password label with "Forgot your password?" on the same line. */
+.password-label-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px}
+.account-panel .password-label-row label{margin:0}
+.password-label-row .text-link{font-size:14px}
+
+/* Password rules in two columns, so the button stays closer to the fields. */
+.account-panel .password-requirements{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin:12px 0 0}
+.account-panel .password-requirements li{margin:4px 0}
+.account-panel .password-requirements li:last-child{grid-column:1/-1}
+
+/* Captcha, button and the policy line. */
+.account-captcha{margin:4px 0 20px}
+.account-panel fieldset>.primary{margin-top:4px}
+.account-legal{margin:14px 0 0;text-align:center;font-size:13px;line-height:1.6;color:var(--muted)}
+.account-legal a{color:var(--red);text-decoration:underline;text-underline-offset:2px}
+.account-panel .account-message{margin:16px 0 0;padding:12px 14px;border-radius:8px;background:#e1ebdf;color:#2f4f37;text-align:center}
+
+/* Bottom of the card. */
+.account-switch{margin-top:24px;padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;font-size:15px}
+.account-switch p{margin:0;line-height:1.6;color:var(--muted)}
+.account-switch .account-switch-small{font-size:14px}
+
+/* Centred cards: "Check your email" and the page opened from an email link. */
+.account-card-center{text-align:center}
+.account-card-icon{width:64px;height:64px;margin:4px auto 18px;border-radius:50%;display:grid;place-items:center;background:#f3e3e2;color:var(--red)}
+.account-page .account-card-title{font-size:clamp(28px,5vw,36px);line-height:1.15;letter-spacing:-.02em;margin:0 0 14px}
+.account-card-text{margin:0 0 12px;line-height:1.7;overflow-wrap:anywhere}
+.account-card-hint{margin:0 0 4px;font-size:14px;line-height:1.6;color:var(--muted)}
+.account-card-center>.primary{margin-top:20px}
+.account-card-back{display:inline-block;margin-top:18px}
+.account-resend{margin-top:22px;padding-top:20px;border-top:1px solid var(--line);text-align:left}
+.account-resend p{margin:0 0 12px;text-align:center;font-size:14px;color:var(--muted)}
+.account-resend .account-captcha{margin-bottom:12px}
+.account-resend .outline-button{width:100%;font:inherit;font-weight:600;cursor:pointer}
+@media(max-width:600px){.account-panel .password-requirements{grid-template-columns:1fr}.account-panel .password-requirements li:last-child{grid-column:auto}}
