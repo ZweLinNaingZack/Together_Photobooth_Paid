@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { useLang } from '../i18n';
 import { LEGAL_LANGUAGES, type ContactId, type LangCode, type PageId } from './legalText';
+import { Icon, type IconName } from '../components/Icon';
 
 // ---------------------------------------------------------------------------
 // Terms of Service, Privacy Policy and Refund Policy, in English, Burmese and Vietnamese.
@@ -49,6 +50,8 @@ function rich(text: string): ReactNode[] {
 }
 
 const PAGES: PageId[] = ['terms', 'privacy', 'refunds'];
+// Icon for each contact card.
+const CONTACT_ICONS: Record<ContactId, IconName> = { phone: 'phone', email: 'mail', tiktok: 'music', facebook: 'facebook', telegram: 'send' };
 
 /** The site language (chosen with the button in the top bar), as policy text. */
 function usePolicyLang() {
@@ -58,7 +61,7 @@ function usePolicyLang() {
 
 /** "Back home" link above each page. The language is changed with the button in the top bar. */
 function TopBar({ lang }: { lang: LangCode }) {
-  return <div className="legal-top"><a className="back-link" href="#">{LEGAL_LANGUAGES[lang].back}</a></div>;
+  return <div className="legal-top"><a className="back-link" href="#"><Icon name="arrowLeft" size={16} />{LEGAL_LANGUAGES[lang].back}</a></div>;
 }
 
 /** One policy page in the chosen language, with the language buttons at the top. */
@@ -113,6 +116,7 @@ export function Contact() {
         // Social links open in a new tab; phone and email open the phone or mail app.
         const external = item.href.startsWith('https://');
         return <li key={item.id} className={ready ? 'contact-card' : 'contact-card is-soon'}>
+          <span className="contact-icon" aria-hidden="true"><Icon name={CONTACT_ICONS[item.id]} size={20} /></span>
           <span className="contact-label">{words.labels[item.id]}</span>
           {/* dir="ltr" keeps the phone number and email in the right order inside any language. */}
           <span className="contact-value" dir="ltr">{!ready ? words.soon : item.id === 'email'
@@ -120,7 +124,7 @@ export function Contact() {
             : item.shown}</span>
           {ready && <a className="contact-action" href={item.href}
             {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
-            {words[item.kind]}<span aria-hidden="true"> →</span>
+            {words[item.kind]}<Icon name={external ? 'arrowUpRight' : 'arrowRight'} size={16} />
           </a>}
         </li>;
       })}

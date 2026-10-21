@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LANGUAGES, setLang, useLang, useT } from '../i18n';
+import { Icon } from './Icon';
 
 /**
  * The language button in the top bar. Opens a small menu with the three languages,
@@ -52,7 +53,7 @@ export function LanguageSwitcher() {
         onClick={() => void choose(item.code)}>
         <span className="lang-name" lang={item.locale}>{item.label}</span>
         <small>{item.english}</small>
-        {item.code === lang && <span className="lang-check" aria-hidden="true">✓</span>}
+        {item.code === lang && <span className="lang-check" aria-hidden="true"><Icon name="check" size={16} /></span>}
       </button>)}
     </div>}
   </div>;

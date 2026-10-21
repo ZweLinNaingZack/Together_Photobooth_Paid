@@ -1,4 +1,5 @@
 import { WarningNotice } from '../components/WarningNotice';
+import { Icon } from '../components/Icon';
 import { useStepHistory } from '../components/useStepHistory';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
@@ -451,10 +452,19 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   const showSteps = active && !conflict;
   const progress: [Step, string][] = [['mode', t('booth.step.mode')], ['source', t('booth.step.source')], ['layout', t('booth.step.layout')], ['session', t('booth.step.session')], ['design', t('booth.step.design')], ['export', t('booth.step.export')]];
   const visibleProgress: [Step, string][] = mode === 'duo' && ['duo', 'join', 'room'].includes(step) ? [['duo', t('booth.step.duo')], ['join', t('booth.step.join')], ['room', t('booth.step.room')]] : progress;
+  // Which step of the progress bar we're on ("upload" shares the photos step); earlier steps are shown as done.
+  const currentStepIndex = visibleProgress.findIndex(([key]) => step === key || (step === 'upload' && key === 'session'));
   return <>
     <section id="booth" className="booth flow-booth" data-current-step={step} hidden={!active} aria-label={t('booth.label')}>
-      <div className="flow-top"><a href="#" className="back-link">{t('booth.leave')}</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}>{t('nav.how')}</button></div>
-      <ol className="flow-steps" aria-label={t('booth.progress')}>{visibleProgress.map(([key, label], index) => <li key={key} data-step={key} className={(step === key || (step === 'upload' && key === 'session')) ? 'current' : ''} aria-current={(step === key || (step === 'upload' && key === 'session')) ? 'step' : undefined}>0{index + 1} <span>{label}</span></li>)}</ol>
+      <div className="flow-top"><a href="#" className="back-link"><Icon name="arrowLeft" size={16} />{t('booth.leave')}</a><button className="text-button" id="show-instructions" onClick={() => setInstructions(true)}><Icon name="help" size={16} />{t('nav.how')}</button></div>
+      {/* Progress: finished steps show a check, the current step is highlighted, later steps stay quiet. */}
+      <ol className="flow-steps" aria-label={t('booth.progress')}>{visibleProgress.map(([key, label], index) => {
+        const isCurrent = step === key || (step === 'upload' && key === 'session');
+        const done = index < currentStepIndex;
+        return <li key={key} data-step={key} className={isCurrent ? 'current' : done ? 'done' : ''} aria-current={isCurrent ? 'step' : undefined}>
+          <span className="step-dot" aria-hidden="true">{done ? <Icon name="check" size={14} /> : index + 1}</span><span>{label}</span>
+        </li>;
+      })}</ol>
       <div id="flow-screen" ref={screen}>
         {active&&savedDraft&&<div className="session-note recovery-panel"><p>{t('booth.draftSaved')}</p><button className="primary" onClick={async()=>{try{if(!savedDraft.guest)await charge.resume(savedDraft.sessionId);recoveredGuest.current=!!savedDraft.guest;setRestored(true);setCard(savedDraft.card);setSource(savedDraft.source);setMode(savedDraft.mode);setEditingApproved(true);setStep('design');setInstructions(false);setSaveRecovery(true);setSavedDraft(null);}catch(e){setSharedError(e instanceof Error?e.message:t('booth.resumeFailed'));}}}>{t('booth.resumeDraft')}</button><button className="text-button" onClick={()=>{if(user)void deleteDraft(user.id).catch(()=>setSharedError(t('booth.deleteFailed')));setSavedDraft(null);}}>{t('booth.deleteDraft')}</button><WarningNotice>{sharedError}</WarningNotice></div>}
         {active&&['session','upload','design','export'].includes(step)&&<details className="session-note recovery-panel recovery-options"><summary>{t(saveRecovery ? 'booth.autosaveOn' : 'booth.autosaveOff')}</summary><label className="recovery-toggle"><input type="checkbox" checked={saveRecovery} onChange={e=>{setSaveRecovery(e.target.checked);if(!e.target.checked&&user){recoveryWrites.current=recoveryWrites.current.catch(()=>{}).then(()=>deleteDraft(user.id)).catch(()=>{setRecoveryMessage(t('booth.removeFailed'));});setRecoveryMessage(t('booth.copyRemoved'));}}}/><span>{t('booth.autosaveLabel')}</span></label><p>{t('booth.autosaveHelp')}</p></details>}{active&&recoveryMessage&&<p className="session-note recovery-status" role="status">{recoveryMessage}</p>}

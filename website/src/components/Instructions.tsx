@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import { Rich } from '../i18n/Rich';
+import { Icon } from './Icon';
 
 /** The "how it works" popup shown when the booth opens. */
 export function Instructions({ open, onDismiss, onContinue }: { open: boolean; onDismiss: () => void; onContinue: () => void }) {
@@ -8,7 +9,7 @@ export function Instructions({ open, onDismiss, onContinue }: { open: boolean; o
   const t = useT();
   useEffect(() => { const d = dialogRef.current; if (open && !d?.open) d?.showModal(); if (!open && d?.open) d.close(); }, [open]);
   return <dialog ref={dialogRef} onCancel={onDismiss} id="instructions" aria-labelledby="instructions-title">
-    <button className="dialog-close" onClick={onDismiss} aria-label={t('intro.close')}>×</button>
+    <button className="dialog-close" onClick={onDismiss} aria-label={t('intro.close')}><Icon name="x" size={20} /></button>
     <div className="eyebrow">{t('intro.eyebrow')}</div>
     <h2 id="instructions-title"><Rich text={t('intro.title')} /></h2>
     <p className="intro-copy">{t('intro.lead')}</p>

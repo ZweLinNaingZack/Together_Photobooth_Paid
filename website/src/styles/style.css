@@ -202,3 +202,7 @@ html:lang(vi) h2{line-height:1.15}
 /* Small screens: let the menu wrap onto a second line instead of pushing the page sideways. */
 @media(max-width:800px){.header nav{flex-shrink:1;min-width:0;max-width:100%;flex-wrap:wrap;row-gap:2px;column-gap:16px}}
 @media(max-width:420px){.lang-button{padding:0 10px}html:lang(my) h1,html:lang(my) .hero h1{font-size:34px}}
+
+/* Holds the demo booth's space while its file loads, so the page doesn't jump. */
+.booth-demo-placeholder{min-height:900px}
+@media(max-width:800px){.booth-demo-placeholder{min-height:1100px}}

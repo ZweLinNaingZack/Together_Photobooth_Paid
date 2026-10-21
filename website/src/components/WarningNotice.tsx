@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { tm, useT } from '../i18n';
+import { Icon } from './Icon';
 
 /** Acknowledged errors stay dismissed until the message changes or clears. */
 export function WarningNotice({ children, title }: { children: ReactNode; title?: string }) {
@@ -33,7 +34,7 @@ export function WarningNotice({ children, title }: { children: ReactNode; title?
   }, [children, dismissed]);
   function dismiss() { setDismissed(body.current?.textContent?.trim() || ''); ref.current?.close(); }
   return <dialog ref={ref} className="leave-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-body`} onCancel={e => { e.preventDefault(); dismiss(); }}>
-    <div className="leave-emblem" aria-hidden="true">♡</div><h2 id={`${id}-title`}>{title ?? t('common.attention')}</h2>
+    <div className="leave-emblem" aria-hidden="true"><Icon name="heart" size={26} /></div><h2 id={`${id}-title`}>{title ?? t('common.attention')}</h2>
     <div ref={body} id={`${id}-body`} className="booth-dialog-copy">{content}</div>
     <div className="leave-actions"><button type="button" className="primary" onClick={dismiss}>{t('common.gotIt')}</button></div>
   </dialog>;

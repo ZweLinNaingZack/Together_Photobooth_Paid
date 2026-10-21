@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 import { Rich } from '../i18n/Rich';
+import { Icon } from './Icon';
 
 
 export function LeaveDialog({ open, count, onCancel, onConfirm, duo = false }: { open: boolean; count: number; onCancel: () => void; onConfirm: () => void; duo?: boolean }) {
@@ -13,8 +14,8 @@ export function LeaveDialog({ open, count, onCancel, onConfirm, duo = false }: {
     if (!open && element?.open) element.close();
   }, [open]);
   return <dialog ref={dialog} className="leave-dialog" role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-description" onCancel={event => { event.preventDefault(); onCancel(); }}>
-    <button className="dialog-close" aria-label={t('leave.keep')} onClick={onCancel}>×</button>
-    <div className="leave-emblem" aria-hidden="true">♡</div>
+    <button className="dialog-close" aria-label={t('leave.keep')} onClick={onCancel}><Icon name="x" size={20} /></button>
+    <div className="leave-emblem" aria-hidden="true"><Icon name="heart" size={26} /></div>
     <div className="eyebrow">{t('leave.eyebrow')}</div>
     <h2 id="leave-title"><Rich text={t(duo ? 'leave.duoTitle' : 'leave.title')} /></h2>
     <p id="leave-description">{duo ? t('leave.duoText') : t(count === 1 ? 'leave.textOne' : 'leave.text', { n: count })}</p>

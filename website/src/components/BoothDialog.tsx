@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { tm, useT } from '../i18n';
+import { Icon } from './Icon';
 
 export function BoothDialog({ open, title, children, cancelLabel, confirmLabel, onCancel, onConfirm, busy = false, error = '' }: {
   open: boolean; title: string; children: ReactNode; cancelLabel: string; confirmLabel: string;
@@ -15,7 +16,7 @@ export function BoothDialog({ open, title, children, cancelLabel, confirmLabel, 
     if (!open && dialog?.open) dialog.close();
   }, [open]);
   return <dialog ref={ref} className="leave-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-body`} aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <div className="leave-emblem" aria-hidden="true">♡</div>
+    <div className="leave-emblem" aria-hidden="true"><Icon name="heart" size={26} /></div>
     <h2 id={`${id}-title`}>{title}</h2>
     <div id={`${id}-body`} className="booth-dialog-copy">{children}</div>
     {error && <p role="alert" className="room-error">{tm(error)}</p>}

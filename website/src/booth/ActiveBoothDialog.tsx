@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { layouts } from './core';
 import type { CardState } from './types';
 import { tm, useT, type Key } from '../i18n';
+import { Icon } from '../components/Icon';
 
 /** What the popup needs to know about the unfinished booth. */
 export interface ActiveBoothInfo {
@@ -74,7 +75,7 @@ export function ActiveBoothDialog({ open, info, continueAfterClose, busy, error,
   }
 
   return <dialog ref={ref} className="leave-dialog active-booth-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-lead`} aria-busy={busy} onCancel={event => event.preventDefault()}>
-    {info.card && !info.ended ? <CardMiniature card={info.card} photos={info.photos || []} /> : <div className="leave-emblem" aria-hidden="true">♡</div>}
+    {info.card && !info.ended ? <CardMiniature card={info.card} photos={info.photos || []} /> : <div className="leave-emblem" aria-hidden="true"><Icon name="heart" size={26} /></div>}
     <h2 id={`${id}-title`}>{title}</h2>
     <p id={`${id}-lead`} className="active-booth-lead">{lead}</p>
 

@@ -16,6 +16,7 @@ import { rememberBoothReturn, consumeBoothReturn } from './auth/inviteReturn.js'
 import { hasRecoverableWork } from './booth/recoveryStore.js';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { useT, type Key } from './i18n';
+import { useScrollReveal } from './components/useScrollReveal';
 
 // Policy pages and Contact: hash → browser tab title key.
 const LEGAL_PAGES: Record<string, Key | undefined> = { '#terms': 'title.terms', '#privacy': 'title.privacy', '#refunds': 'title.refunds', '#contact': 'title.contact' };
@@ -23,6 +24,7 @@ const LEGAL_PAGES: Record<string, Key | undefined> = { '#terms': 'title.terms', 
 export function App() {
   const { user, loading, recovery, emailLink, error: authError } = useAuth();
   const t = useT();   // redraws the whole app when the language changes
+  useScrollReveal();  // sections with class "reveal" fade up as they scroll into view
   const [hash, setHash] = useState(window.location.hash);
   const leaveGuard = useRef<(proceed: () => void) => void>(proceed => proceed());
   const currentHash = useRef(window.location.hash);
@@ -70,7 +72,9 @@ export function App() {
   }, [hash, isBooth, isAbout, isAccount, legal]);
   return <>
     <a className="skip-link" href="#main">{t('nav.skip')}</a>
-    <header className="header"><a className="wordmark" href="#" aria-label={t('nav.home')}>together<span className="brand-dot"><DecorativeIcon /></span></a><nav aria-label={t('nav.main')}><a href="#how-it-works" className="home-nav" hidden={isBooth}>{t('nav.how')}</a><a href="#about" className="about-nav" aria-current={isAbout ? 'page' : undefined}>{t('nav.about')}</a><a href="#contact" className="contact-nav" aria-current={hash === '#contact' ? 'page' : undefined}>{t('nav.contact')}</a><a href="#account" className="account-nav" aria-current={isAccount ? 'page' : undefined}>{user ? t('nav.myAccount') : t('nav.signIn')}</a><LanguageSwitcher /></nav></header>
+    <header className="header"><a className="wordmark" href="#" aria-label={t('nav.home')}>together<span className="brand-dot"><DecorativeIcon /></span></a><nav aria-label={t('nav.main')}><a href="#how-it-works" className="home-nav" hidden={isBooth}>{t('nav.how')}</a><a href="#about" className="about-nav" aria-current={isAbout ? 'page' : undefined}>{t('nav.about')}</a><a href="#contact" className="contact-nav" aria-current={hash === '#contact' ? 'page' : undefined}>{t('nav.contact')}</a><a href="#account" className="account-nav" aria-current={isAccount ? 'page' : undefined}>{user ? t('nav.myAccount') : t('nav.signIn')}</a></nav>
+      {/* Outside <nav> so on phones it can sit on the logo row, with the links on their own row below. */}
+      <LanguageSwitcher /></header>
     <main id="main"><Suspense fallback={<p className="session-note" role="status">{t('nav.loading')}</p>}>
       {(!isBooth && !isAbout && !isAccount && !legal || isBooth && !user) && <Home />}
       {isAccount && <Account page={hash === '#account/buy' ? 'buy' : hash === '#account/admin' ? 'admin' : 'overview'} />}

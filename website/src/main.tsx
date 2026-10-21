@@ -5,6 +5,7 @@ import { App } from './App';
 import { startLanguage } from './i18n';
 import './styles/style.css';
 import './styles/booth-flow.css';
+import './styles/polish.css';   // last: shared motion, icons and the small UI fixes on top of the styles above
 
 // Pick the language (saved choice or the phone's language) before the first draw,
 // so Burmese and Vietnamese visitors never see a flash of English.

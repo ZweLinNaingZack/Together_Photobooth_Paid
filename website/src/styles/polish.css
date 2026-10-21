@@ -1,0 +1,228 @@
+/* ==========================================================================
+   Polish layer (20 Oct 2026)
+   Loaded last (see main.tsx). Keeps the existing cream / sage / red look and
+   adds: one motion + shadow scale, SVG icon styling, a clearer booth progress
+   bar, a tidier phone header, small press/hover feedback, and scroll reveals.
+   Booth rules start with `.flow-booth` so they win over journey.css, which
+   loads later (it comes with the booth).
+   ========================================================================== */
+
+:root{
+  /* Motion: things arrive with a soft slow-down; exits are quicker. */
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --ease-in:cubic-bezier(.4,0,1,1);
+  --dur-fast:150ms;
+  --dur:240ms;
+  --dur-slow:600ms;
+  /* Shadows: one small, one medium, one for red buttons. */
+  --shadow-sm:0 1px 2px #2528230d,0 2px 6px #2528230a;
+  --shadow-md:0 2px 4px #2528230f,0 12px 28px #25282314;
+  --shadow-red:0 6px 18px #a82e3e33;
+  --red-soft:#a82e3e0f;      /* light red fill behind icons */
+  --red-line:#a82e3e2e;      /* light red border around icons */
+}
+
+/* ---- Icons ---- */
+.icon{display:inline-block;flex-shrink:0;vertical-align:middle}
+
+/* ---- Buttons: arrow nudges on hover, a small press on tap ---- */
+.primary:has(.cta-arrow){gap:10px}
+.cta-arrow,.mode-action .icon,.source-action .icon,.contact-action .icon{transition:transform var(--dur) var(--ease-out)}
+.primary:hover .cta-arrow{transform:translateX(4px)}
+.primary{transition:background var(--dur),transform var(--dur) var(--ease-out),box-shadow var(--dur) var(--ease-out)}
+.primary:hover{box-shadow:var(--shadow-red)}
+.primary:active:not(:disabled){transform:translateY(0) scale(.98);transition-duration:var(--dur-fast)}
+.outline-button:active:not(:disabled){transform:scale(.98)}
+.text-button:has(.icon){display:inline-flex;align-items:center;gap:6px}
+
+/* ---- "Back" links: a small pill with an arrow that nudges left on hover ---- */
+a.back-link,.legal-top a.back-link{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 16px 0 12px;border:1px solid var(--line);border-radius:999px;color:var(--ink);font-size:14px;background:#faf8f2;transition:border-color var(--dur),box-shadow var(--dur)}
+a.back-link:hover{border-color:var(--ink);box-shadow:var(--shadow-sm);color:var(--ink)}
+a.back-link .icon{transition:transform var(--dur) var(--ease-out)}
+a.back-link:hover .icon{transform:translateX(-3px)}
+
+/* ---- Header ---- */
+.header nav{margin-left:auto}
+.header nav a{position:relative}
+/* A thin red line grows under the link you hover, and stays under the page you're on. */
+.header nav a::after{content:'';position:absolute;left:0;right:0;bottom:6px;height:1.5px;border-radius:2px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform var(--dur) var(--ease-out)}
+.header nav a:hover::after,.header nav a[aria-current=page]::after{transform:scaleX(1)}
+.header nav a[aria-current=page]{color:var(--red)}
+.about-nav[aria-current="page"]{text-decoration:none}
+/* Phones: logo + language on the first row, the menu links centred on the row below. */
+@media(max-width:800px){
+  .header{display:grid;grid-template-columns:1fr auto;grid-template-areas:"logo lang" "nav nav";align-items:center;row-gap:4px;column-gap:12px;min-height:0;padding:14px 5% 6px}
+  .header .wordmark{grid-area:logo;justify-self:start}
+  .header>.lang-switch{grid-area:lang;justify-self:end}
+  .header nav,html:lang(my) .header nav{grid-area:nav;margin:0;justify-content:center;flex-wrap:wrap;column-gap:22px;row-gap:0;max-width:none}
+  .header nav a{min-height:44px}
+}
+
+/* ---- Step numbers (01 / 02 / 03): fixed width, so the text beside them lines up
+        even though "1" is narrower than "2" and "3". ---- */
+.steps .step-number{flex:0 0 2.2em}
+
+/* ---- Home: "how it works" steps get matching icons in soft circles ---- */
+.hero-note .icon{color:var(--red)}
+#home .step-icon,.step-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:var(--red-soft);border:1px solid var(--red-line);color:var(--red);font-size:0;transition:transform var(--dur) var(--ease-out),background var(--dur)}
+.steps article:hover .step-icon{transform:translateY(-3px) rotate(-6deg);background:#a82e3e1a}
+
+/* ---- FAQ: a round + that turns into × (rotated) when open ---- */
+.faq-list summary .faq-toggle{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--red-line);color:var(--red);font-size:0;transition:transform var(--dur) var(--ease-out),background var(--dur),color var(--dur),border-color var(--dur)}
+.faq-list summary:hover .faq-toggle{background:var(--red-soft)}
+.faq-list details[open] summary .faq-toggle{transform:rotate(45deg);background:var(--red);border-color:var(--red);color:#fff}
+.faq-list details[open] .faq-answer{animation:fade-down var(--dur-slow) var(--ease-out) both}
+@keyframes fade-down{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+/* ---- Contact cards: icon tile on the left, gentle lift on hover ---- */
+.contact-card{position:relative;padding-left:78px;transition:transform var(--dur) var(--ease-out),box-shadow var(--dur) var(--ease-out)}
+.contact-card:not(.is-soon):hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.contact-icon{position:absolute;left:20px;top:20px;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--red-soft);color:var(--red)}
+.contact-card.is-soon .contact-icon{background:#25282308;color:var(--muted)}
+.legal-page a.contact-action{display:inline-flex;align-items:center;gap:6px;min-height:36px;transition:background var(--dur),color var(--dur)}
+.legal-page a.contact-action:hover .icon{transform:translateX(3px)}
+
+/* ---- Pop-ups: round close button, icon emblem ---- */
+.dialog-close{display:grid;place-items:center;width:40px;height:40px;padding:0;top:12px;right:12px;border-radius:50%;transition:background var(--dur),color var(--dur)}
+.dialog-close:hover{background:#25282310;color:var(--ink)}
+.leave-emblem{font-size:0}
+/* Booth instructions: numbers in a fixed-width column so every step's text lines up. */
+#instructions .instruction-list li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;align-items:start}
+#instructions .instruction-list li>span{line-height:1.15}
+/* "Let's go" stays visible at the bottom of the pop-up while the steps scroll (short phone screens). */
+#instructions #instructions-continue{position:sticky;bottom:0;width:100%;box-shadow:0 -14px 18px var(--paper),var(--shadow-red)}
+.lang-check{display:grid;place-items:center}
+
+/* ==========================================================================
+   Booth
+   ========================================================================== */
+
+/* Top row: "Leave the booth" pill and "How it works" on one line, vertically centred. */
+.flow-booth .flow-top{align-items:center;gap:12px;flex-wrap:wrap}
+.flow-booth .flow-top>a.back-link{padding-top:0;padding-bottom:0}
+.flow-booth .flow-top>.text-button{min-height:40px;padding:0 4px;margin:0}
+
+/* Progress bar: numbered dots joined by a line. Done = dark dot with a check, current = red. */
+.flow-booth .flow-steps{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;row-gap:10px}
+.flow-booth .flow-steps li{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;transition:color var(--dur)}
+.flow-booth .flow-steps li+li::before{content:'';width:32px;height:1px;background:var(--line);margin:0 12px;transition:background var(--dur)}
+.flow-booth .flow-steps li.done+li::before{background:var(--ink)}
+.flow-booth .step-dot{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1px solid #c9ccc0;font-size:12px;font-weight:600;color:var(--muted);background:transparent;transition:background var(--dur),color var(--dur),border-color var(--dur),box-shadow var(--dur)}
+.flow-booth .flow-steps li.done{color:var(--ink)}
+.flow-booth .flow-steps li.done .step-dot{background:var(--ink);border-color:var(--ink);color:#fff}
+.flow-booth .flow-steps li.current{color:var(--red);font-weight:650}
+.flow-booth .flow-steps li.current .step-dot{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 0 0 4px #a82e3e1f}
+@media(max-width:1100px){.flow-booth .flow-steps li+li::before{width:18px;margin:0 8px}}
+/* Phones: all six dots in a row, only the current step's name next to its dot. */
+@media(max-width:800px){
+  /* The current step's name sits centred under the row of dots, so long names never push dots off-screen. */
+  .flow-booth .flow-steps{position:relative;flex-wrap:nowrap;padding:12px 0 36px;margin:8px 0}
+  .flow-booth .flow-steps li.current>span:last-child{position:absolute;left:0;right:0;bottom:10px;text-align:center}
+  /* Older phone rules stacked each step vertically; keep dot + line on one row and never squash a dot. */
+  .flow-booth .flow-steps li{display:flex;flex-direction:row;flex-shrink:0;gap:8px;font-size:13px;text-align:left}
+  .flow-booth .flow-steps li>span:last-child{display:none}
+  .flow-booth .flow-steps li.current>span:last-child{display:block}
+  .flow-booth .flow-steps li+li::before{width:10px;margin:0 5px}
+  .flow-booth .step-dot{width:24px;height:24px;font-size:11px}
+}
+
+/* Choice cards (Solo / Duo, Take / Upload): icon on top, arrow on the action line, lift on hover. */
+.flow-booth :is(.mode-option,.source-option){position:relative;transition:transform var(--dur) var(--ease-out),box-shadow var(--dur) var(--ease-out),border-color var(--dur)}
+.flow-booth :is(.mode-option,.source-option):hover{transform:translateY(-4px);box-shadow:var(--shadow-md)}
+.flow-booth :is(.mode-option,.source-option):active{transform:translateY(-1px) scale(.99);transition-duration:var(--dur-fast)}
+.flow-booth .mode-icon{font-size:0;padding:0;width:58px;min-width:58px;background:var(--red-soft);border-color:var(--red-line);transition:transform var(--dur) var(--ease-out)}
+.flow-booth :is(.mode-option,.source-option):hover .mode-icon{transform:scale(1.06)}
+.flow-booth .source-option .mode-icon{margin-bottom:22px}
+.flow-booth .source-option strong{margin-top:18px}
+.flow-booth :is(.mode-action,.source-action){display:flex;align-items:center;justify-content:space-between;gap:12px}
+.flow-booth :is(.mode-option,.source-option):hover :is(.mode-action,.source-action) .icon{transform:translateX(5px)}
+.mode-badge .icon{margin-right:-1px}
+
+/* Layout tick: a red circle with a white check. */
+.flow-booth .layout-check{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;transform:scale(.6);transition:opacity var(--dur),transform var(--dur) var(--ease-out)}
+.flow-booth .layout-option input:checked+.layout-choice .layout-check{transform:scale(1)}
+
+/* Step actions: the main button first on phones, the "back" link quietly underneath. */
+.flow-booth .step-actions{display:flex;flex-direction:column;align-items:center;gap:6px}
+.flow-booth .step-actions>p{order:0;margin-bottom:12px}
+.flow-booth .step-actions>.primary{order:1}
+.flow-booth .step-actions>.text-button{order:2;margin:4px 0 0}
+@media(min-width:801px){
+  .flow-booth .step-actions{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:12px 24px}
+  .flow-booth .step-actions>p{flex-basis:100%;text-align:center}
+  .flow-booth .step-actions>.text-button{order:0;margin:0}
+}
+
+/* Status lines above the photos/editing steps ("Backup saved…", "Your free session has been used…"):
+   centred under the auto-save box as small soft chips, instead of hugging the left edge. */
+.flow-booth #flow-screen>:is(p.recovery-status,div.session-note){display:block;width:fit-content;max-width:min(920px,100%);margin:10px auto;padding:8px 16px;border-radius:999px;background:#e9ece2;color:#3f4a3f;font-size:13px;line-height:1.5;text-align:center}
+.flow-booth #flow-screen>div.session-note:empty{display:none}
+
+/* ---- Frame & filter ---- */
+/* Filter picker: a visible "Photo filter" label with a small icon next to the dropdown. */
+.flow-booth .preview-filter{display:flex;align-items:center;gap:10px}
+.flow-booth .preview-filter-label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+.flow-booth .preview-filter-label .icon{color:var(--red)}
+.flow-booth .expand-preview-button{display:flex;align-items:center;gap:8px;font-weight:550;transition:border-color var(--dur),background var(--dur)}
+.flow-booth .expand-preview-button:hover:not(:disabled){border-color:var(--ink);background:#faf8f2}
+/* Right column, top to bottom: frames → chosen frame → its options → photo positions → back. */
+.flow-booth .customization-grid .finish-controls{min-width:0;padding-top:0}
+.flow-booth .finish-controls .editing-designs{padding:0 0 4px;margin-bottom:12px}
+.flow-booth .finish-controls .editing-designs h2{margin:0 0 10px;font-size:17px;font-weight:600}
+/* Frames scroll sideways: fade the right edge so it's clear there are more. */
+.flow-booth .finish-controls .frame-carousel{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent);padding-right:40px}
+.flow-booth .chosen-design-note{justify-content:flex-start;gap:10px;padding-bottom:16px;margin-bottom:22px}
+.flow-booth .chosen-design-note .icon{width:26px;height:26px;padding:5px;border-radius:50%;background:var(--red);color:#fff}
+.flow-booth .chosen-design-note>strong{font-size:18px}
+.flow-booth .position-tools{margin:24px 0 8px;padding:18px;border:1px solid var(--line);border-radius:12px;background:#faf8f2}
+.flow-booth .position-tools .session-note{margin:0 0 12px;font-size:13px;line-height:1.6}
+.flow-booth .reset-positions{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:550;background:var(--paper)}
+.flow-booth .finish-controls>.back-step{margin-top:8px}
+
+/* ---- Export & download ---- */
+/* One clear card: icon, what you get, the big Download button. */
+.flow-booth .download-card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px 20px;padding:24px 26px;border:1px solid var(--line);border-radius:16px;background:#faf8f2;box-shadow:var(--shadow-sm)}
+.flow-booth .download-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:50%;background:var(--red-soft);border:1px solid var(--red-line);color:var(--red)}
+.flow-booth .download-text>strong{display:block}
+.flow-booth .download-text>p{margin:6px 0 4px}
+.flow-booth .download-card .finish-buttons .primary{display:inline-flex;align-items:center;gap:10px;padding:16px 30px;font-size:16px}
+.flow-booth .download-card #export-status{grid-column:1/-1;margin:0}
+.flow-booth .download-card #export-status:empty{display:none}
+.flow-booth .export-help a,.flow-booth .export-help button,.flow-booth .done-actions .outline-button{display:inline-flex;align-items:center;gap:8px;font-weight:550}
+.flow-booth .done-actions{align-items:center}
+@media(max-width:600px){
+  /* Phones: the filter row gets the full width (the "Your photocard" label is obvious from the preview). */
+  .flow-booth .preview-toolbar>span:first-child{display:none}
+  .flow-booth .preview-filter{width:100%}
+  .flow-booth .preview-filter select{flex:1;min-width:0}
+}
+@media(max-width:700px){
+  .flow-booth .download-card{grid-template-columns:minmax(0,1fr);padding:20px;text-align:center}
+  .flow-booth .download-icon{display:none}
+  .flow-booth .download-text .back-step{justify-content:center}
+  .flow-booth .download-card .finish-buttons{grid-column:1/-1}
+  .flow-booth .download-card .finish-buttons .primary{width:100%;justify-content:center}
+}
+
+/* Each booth step fades up when it appears; the cards follow a moment later. */
+.flow-booth #flow-screen>.flow-heading{animation:fade-up var(--dur-slow) var(--ease-out) both}
+.flow-booth :is(.mode-options,.source-options)>*{animation:fade-up var(--dur-slow) var(--ease-out) both}
+.flow-booth :is(.mode-options,.source-options)>*:nth-child(1){animation-delay:80ms}
+.flow-booth :is(.mode-options,.source-options)>*:nth-child(2){animation-delay:160ms}
+.flow-booth .layout-picker{animation:fade-up var(--dur-slow) var(--ease-out) 80ms both}
+@keyframes fade-up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* ==========================================================================
+   Scroll reveal (see components/useScrollReveal.ts)
+   ========================================================================== */
+html.reveal-ready .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s var(--ease-out),transform .7s var(--ease-out);transition-delay:var(--reveal-delay,0ms)}
+html.reveal-ready .reveal.is-visible{opacity:1;transform:none}
+
+/* ==========================================================================
+   Respect "reduce motion": no movement, everything shown straight away.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce){
+  html.reveal-ready .reveal{opacity:1;transform:none;transition:none}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important}
+  html{scroll-behavior:auto}
+}
