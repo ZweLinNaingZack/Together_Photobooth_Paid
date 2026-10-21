@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
 import { useT } from '../i18n';
+import { Icon } from '../components/Icon';
 
-interface Props { actionLabel?: string; shots: string[]; count: number; retake: number | null; disabled?: boolean; onMove: (from: number, to: number) => void; onRetake: (index: number) => void }
-export function PhotoTray({ shots, count, retake, disabled = false, onMove, onRetake, actionLabel }: Props) {
+/** `compact`: the photo strip beside the live camera. Small icon buttons sit on each photo instead of the text rows. */
+interface Props { compact?: boolean; actionLabel?: string; shots: string[]; count: number; retake: number | null; disabled?: boolean; onMove: (from: number, to: number) => void; onRetake: (index: number) => void }
+export function PhotoTray({ shots, count, retake, disabled = false, onMove, onRetake, actionLabel, compact = false }: Props) {
   const t = useT();
   const action = actionLabel ?? t('tray.retake');
   const [status, setStatus] = useState('');
@@ -27,17 +29,31 @@ export function PhotoTray({ shots, count, retake, disabled = false, onMove, onRe
     pointer.current = null; setDragging(null); setTarget(null);
     if (e.type === 'pointerup' && to !== null) reorder(from, to);
   }
+  // Pointer drag for touch screens (mouse uses native drag and drop on the photo itself).
+  const dragHandle = (i: number) => <button className="drag-handle" disabled={disabled} aria-label={t('tray.dragLabel', { n: i + 1 })}
+    onPointerDown={e => { if (e.pointerType === 'mouse' || disabled) return; pointer.current = { id: e.pointerId, from: i }; e.currentTarget.setPointerCapture(e.pointerId); setDragging(i); }}
+    onPointerMove={e => { if (pointer.current) { e.preventDefault(); setTarget(targetAt(e)); } }} onPointerUp={finish} onPointerCancel={finish}>⠿</button>;
+  const article = (i: number, children: ReactNode) => <article key={i} className={`review-photo ${retake === i ? 'selected-retake' : ''} ${dragging === i ? 'dragging' : ''} ${target === i ? 'drop-target' : ''}`} data-shot={i} draggable={!!shots[i] && !disabled}
+    onDragStart={e => { setDragging(i); e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.effectAllowed = 'move'; }}
+    onDragOver={e => { if (dragging !== null && shots[i]) { e.preventDefault(); setTarget(i); } }}
+    onDrop={e => { e.preventDefault(); if (dragging !== null) reorder(dragging, i); setDragging(null); setTarget(null); }} onDragEnd={() => { setDragging(null); setTarget(null); }}>{children}</article>;
+  if (compact) return <div className="photo-review photo-strip-tray" ref={tray}><p className="sr-only">{t('tray.help', { action })}</p><div className="review-photos">
+    {Array.from({ length: count }, (_, i) => article(i, <div className="review-image">
+      {shots[i] ? <img src={shots[i]} alt={t('tray.photo', { n: i + 1 })} draggable={false} /> : <span className="strip-empty" aria-label={t('tray.empty')}><Icon name="heart" size={18} /><i>{i + 1}</i></span>}
+      {shots[i] && <><b>{i + 1}</b><div className="strip-photo-tools">
+        <button disabled={disabled || i === 0} aria-label={t('tray.earlierLabel', { n: i + 1 })} title={t('tray.earlier')} onClick={() => reorder(i, i - 1)}><Icon name="arrowLeft" size={14} className="strip-arrow" /></button>
+        {dragHandle(i)}
+        <button disabled={disabled || i === count - 1 || !shots[i + 1]} aria-label={t('tray.laterLabel', { n: i + 1 })} title={t('tray.later')} onClick={() => reorder(i, i + 1)}><Icon name="arrowRight" size={14} className="strip-arrow" /></button>
+        <button className="retake-button" disabled={disabled} aria-label={t('tray.actionPhoto', { action, n: i + 1 })} title={t('tray.actionPhoto', { action, n: i + 1 })} onClick={() => onRetake(i)}><Icon name="reset" size={14} /></button>
+      </div></>}
+    </div>))}
+  </div><p id="order-status" className="sr-only" role="status">{status}</p></div>;
   return <div className="photo-review" ref={tray}><div className="review-heading"><strong>{t('tray.title')}</strong><span>{shots.filter(Boolean).length} / {count}</span></div><p>{t('tray.help', { action })}</p><div className="review-photos">
-    {Array.from({ length: count }, (_, i) => <article key={i} className={`review-photo ${retake === i ? 'selected-retake' : ''} ${dragging === i ? 'dragging' : ''} ${target === i ? 'drop-target' : ''}`} data-shot={i} draggable={!!shots[i] && !disabled}
-      onDragStart={e => { setDragging(i); e.dataTransfer.setData('text/plain', String(i)); e.dataTransfer.effectAllowed = 'move'; }}
-      onDragOver={e => { if (dragging !== null && shots[i]) { e.preventDefault(); setTarget(i); } }}
-      onDrop={e => { e.preventDefault(); if (dragging !== null) reorder(dragging, i); setDragging(null); setTarget(null); }} onDragEnd={() => { setDragging(null); setTarget(null); }}>
+    {Array.from({ length: count }, (_, i) => article(i, <>
       <div className="review-image">{shots[i] ? <img src={shots[i]} alt={t('tray.photo', { n: i + 1 })} draggable={false} /> : <span>{i + 1}</span>}<b>{i + 1}</b></div>
       {shots[i] ? <><div className="reorder-controls"><button disabled={disabled || i === 0} aria-label={t('tray.earlierLabel', { n: i + 1 })} onClick={() => reorder(i, i - 1)}>{t('tray.earlier')}</button>
-        <button className="drag-handle" disabled={disabled} aria-label={t('tray.dragLabel', { n: i + 1 })}
-          onPointerDown={e => { if (e.pointerType === 'mouse' || disabled) return; pointer.current = { id: e.pointerId, from: i }; e.currentTarget.setPointerCapture(e.pointerId); setDragging(i); }}
-          onPointerMove={e => { if (pointer.current) { e.preventDefault(); setTarget(targetAt(e)); } }} onPointerUp={finish} onPointerCancel={finish}>⠿</button>
+        {dragHandle(i)}
         <button disabled={disabled || i === count - 1 || !shots[i + 1]} aria-label={t('tray.laterLabel', { n: i + 1 })} onClick={() => reorder(i, i + 1)}>{t('tray.later')}</button></div><button className="retake-button" disabled={disabled} onClick={() => onRetake(i)}>{t('tray.actionPhoto', { action, n: i + 1 })}</button></> : <span className="empty-photo-label">{t('tray.empty')}</span>}
-    </article>)}
+    </>))}
   </div><p id="order-status" className="session-note" role="status">{status}</p></div>;
 }

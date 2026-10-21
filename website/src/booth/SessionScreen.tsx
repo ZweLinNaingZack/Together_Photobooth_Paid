@@ -1,13 +1,13 @@
 import { WarningNotice } from '../components/WarningNotice';
 import { CameraCardPreview } from './CameraCardPreview';
 import { useEffect, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { CSSProperties, RefObject } from 'react';
 import { layouts } from './core';
 import { captureSequence } from './capture';
 import { useDuoPeer } from './useDuoPeer';
 import type { DuoEvent } from './useDuoPeer';
 import type { RoomSession } from './rooms';
-import { Heading } from './shared';
+import { Icon } from '../components/Icon';
 import { PhotoTray } from './PhotoTray';
 import type { CardState } from './types';
 import { ScreenFlash, flashColors } from './ScreenFlash';
@@ -18,9 +18,11 @@ type Facing = 'user' | 'environment';
 type CameraChoice = { facing: Facing } | { deviceId: string };
 import {createDuoCaptures} from './duoCaptures.mjs';
 import {diagnosticReport} from './diagnostics.js';
+import {localDate} from './filmDate.js';
 import {unlockCameraSound,cameraSound} from './cameraSounds.js';
 import { tm, useT, type Key } from '../i18n';
-import { layoutName, layoutNote } from '../i18n/layouts';
+import { layoutName } from '../i18n/layouts';
+import './booth-stage.css';
 
 interface Props {
   beforeReview: () => Promise<boolean>;
@@ -30,8 +32,10 @@ interface Props {
   duoControl?: RefObject<((event: DuoEvent) => Promise<void>) | null>;
   onRemoteSession?: (index: number | null) => void;
   onSharedPhotos?: (shots: string[]) => void;
-  card: CardState; retake: number | null; method: 'manual' | 'timer'; seconds: number;
-  onMethod: (method: 'manual' | 'timer') => void; onSeconds: (seconds: number) => void;
+  card: CardState; retake: number | null; seconds: number;
+  /** The booth always uses the countdown. 'manual' (one photo per tap) is kept only for the duo browser test harnesses. */
+  method?: 'manual' | 'timer';
+  onSeconds: (seconds: number) => void;
   onShot: (index: number, shot: string) => void; onMove: (from: number, to: number) => void;
   onRetake: (index: number | null) => void; onBack: () => void; onNext: (wasCamera: boolean) => void;
   restoreCamera: boolean; interrupted: boolean;
@@ -39,7 +43,7 @@ interface Props {
   mirror: boolean; onMirrorChange: (mirrored: boolean) => void;
 }
 export function SessionScreen(props: Props) {
-  const { card, retake, method, seconds } = props, layout = layouts[card.layout];
+  const { card, retake, method = 'timer', seconds } = props, layout = layouts[card.layout];
   const t = useT();
   const waitingPermission = t('session.waitingPermission');
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -223,35 +227,63 @@ export function SessionScreen(props: Props) {
     }
   }
   const defaultStatus = retake !== null ? t('session.retaking', { n: retake + 1 }) : complete ? t('session.allReady') : method === 'manual' ? t('session.manualHelp') : t('session.timerHelp', { n: seconds });
-  return <><Heading eyebrow={t('session.eyebrow')} note={`${layoutName(layout)} · ${layoutNote(layout)}. ${t('session.note')}`} />
-    <div className="session-surface"><div className="session-bar"><span>{t(duo ? 'session.duoBar' : 'session.soloBar')}</span><div className="session-tools"><button className="mirror-toggle" aria-pressed={sound} onClick={()=>{unlockCameraSound();setSound(value=>!value);}}>{t('session.sound', { state: t(sound ? 'common.on' : 'common.off') })}</button><button type="button" className={`mirror-toggle ${props.mirror ? 'enabled' : ''}`} aria-pressed={props.mirror} disabled={locked || !stream} onClick={() => props.onMirrorChange(!props.mirror)}>{t('session.mirror', { state: t(props.mirror ? 'common.on' : 'common.off') })}</button><button className="text-button" id="camera-toggle" disabled={locked} onClick={()=>void toggleCamera()}>{t(stream ? 'session.cameraOff' : 'session.cameraOn')}</button></div></div>
-      <div style={{aspectRatio:String(photoRatio),maxHeight:'none',maxWidth:`min(100%, ${photoRatio*55}svh)`,marginInline:'auto'}} className={`session-view ${duo ? 'duo-live-view' : 'solo-live-view'}`} ref={view}>
+  const statusText = guest ? t(remoteBusy ? 'session.guestTaking' : complete ? 'session.guestReady' : 'session.guestWaiting') : busy ? status : retake !== null ? defaultStatus : status || defaultStatus;
+  const cameraNote = message && message !== waitingPermission ? '' : message || (duo ? peer.connected ? t('session.bothConnected') : t('session.phase', { phase: tm(peer.phase) }) : t('session.staysHere'));
+  // Layout: the photo strip on the left, the big live camera on the right (stacked on phones).
+  // --photo-ratio sizes both the strip slots and the camera, so the camera always fits the screen height.
+  const stageStyle = { '--photo-ratio': String(photoRatio), '--count': String(layout.count) } as CSSProperties;
+  return <div className={`booth-stage ${duo ? 'is-duo' : 'is-solo'}`} style={stageStyle}>
+    <h1 tabIndex={-1} className="sr-only">{t('session.eyebrow')}</h1>
+    <aside className="stage-strip" aria-label={t('tray.title')}>
+      <div className="strip-head"><span className="eyebrow">{t('session.stripEyebrow')}</span><strong>{ready} / {layout.count}</strong></div>
+      <div className="strip-paper">
+        <PhotoTray compact shots={visibleShots} count={layout.count} retake={retake} disabled={locked || syncCount>0 || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
+        <div className="strip-foot" aria-hidden="true"><span>{card.caption || 'together'}</span><small>{layoutName(layout)} · {localDate()}</small></div>
+      </div>
+      <div className="session-buttons strip-actions">
+        <button className={complete && retake === null ? 'primary' : 'secondary'} hidden={guest} disabled={locked || !complete || retake !== null} onClick={review}>{t('session.toEditing')}<Icon name="arrowRight" size={18} /></button>
+        {retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>{t('session.cancelRetake')}</button>}
+        <button className="text-button" disabled={locked} onClick={props.onBack}>{t(duo ? 'session.leave' : 'upload.changeLayout')}</button>
+      </div>
+    </aside>
+    <section className="stage-camera" aria-label={t(duo ? 'session.duoBar' : 'session.soloBar')}>
+      <div className="session-view-wrap"><div className={`session-view ${duo ? 'duo-live-view' : 'solo-live-view'} ${busy || remoteBusy ? 'is-shooting' : ''}`} ref={view}>
         <div className="camera-pane" style={{ order: guest ? 1 : 0 }}><video ref={video} id="live-camera" aria-label={t('session.soloBar')} className={props.mirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setVideoReady(true)} onEmptied={() => setVideoReady(false)} hidden={!stream} />{(!stream || !videoReady) && <div className="camera-placeholder"><span aria-hidden="true">◎</span><strong>{t(pending ? 'session.opening' : 'session.isOff')}</strong><p>{t(pending ? 'session.allowToJoin' : 'session.turnOn')}</p></div>}<span className="camera-name">{t('room.you')}</span></div>
         {duo && <div className="camera-pane" style={{ order: guest ? 0 : 1 }}><video ref={remoteVideo} aria-label={t('session.partnerCamera')} className={remoteMirror ? 'mirrored' : ''} autoPlay muted playsInline onPlaying={() => setRemoteReady(true)} onEmptied={() => setRemoteReady(false)} hidden={!peer.remote} />{(!peer.remote || !peer.connected || !remoteReady) && <div className="camera-placeholder"><span aria-hidden="true">♡</span><strong>{t('session.waitingPerson')}</strong><p>{t('session.bothEnter')}</p></div>}<span className="camera-name">{t('room.yourPerson')}</span></div>}
-        {shutter > 0 && <div key={shutter} className="shutter-flash" aria-hidden="true" />}
-        <div id="shot-countdown" hidden={countdown === null} aria-live="assertive">{countdown}</div>
+        <span className="cam-live" aria-hidden="true"><i />{t('session.live')}</span>
+        <div className="cam-tools"><button type="button" className="mirror-toggle" aria-pressed={sound} onClick={()=>{unlockCameraSound();setSound(value=>!value);}}>{t('session.sound', { state: t(sound ? 'common.on' : 'common.off') })}</button><button type="button" className={`mirror-toggle ${props.mirror ? 'enabled' : ''}`} aria-pressed={props.mirror} disabled={locked || !stream} onClick={() => props.onMirrorChange(!props.mirror)}>{t('session.mirror', { state: t(props.mirror ? 'common.on' : 'common.off') })}</button></div>
+        <span className="cam-corner tl" aria-hidden="true" /><span className="cam-corner tr" aria-hidden="true" /><span className="cam-corner bl" aria-hidden="true" /><span className="cam-corner br" aria-hidden="true" />
+        {shutter > 0 && <div key={`shutter-${shutter}`} className="shutter-flash" aria-hidden="true" />}
+        <div id="shot-countdown" key={`count-${countdown}`} hidden={countdown === null} aria-live="assertive">{countdown}</div>
+      </div></div>
+      <div className="stage-controls">
+        <fieldset className="timer-chips" hidden={guest} disabled={locked}><legend className="sr-only">{t('session.countdown')}</legend><Icon name="clock" size={16} />{[3, 5, 7].map(value => <label key={value}><input type="radio" name="timer-seconds" value={value} checked={seconds === value} onChange={() => { props.onSeconds(value); setStatus(''); }} /><span>{t('session.secondsShort', { n: value })}</span></label>)}</fieldset>
+        <div className="capture-near-preview" hidden={guest}><button className="primary shutter-button" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}><span className="shutter-dot" aria-hidden="true" />{retake !== null ? t('session.retakeN', { n: retake + 1 }) : method === 'manual' ? t('session.takeOne') : ready ? t('session.continueCountdown') : t('session.startCountdown')}</button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>{t('session.stopCountdown')}</button></div>
+        <button type="button" hidden={guest} className={`mirror-toggle flash-chip ${props.flash ? 'enabled' : ''}`} aria-pressed={props.flash} disabled={locked} onClick={() => props.onFlashChange(!props.flash)}><Icon name="zap" size={15} />{t('session.flashState', { state: t(props.flash ? 'common.on' : 'common.off') })}</button>
       </div>
-      <div className="capture-near-preview" hidden={guest}><button className="primary" id="capture-session" hidden={guest} disabled={locked || !canCapture || (complete && retake === null)} onClick={start}>{retake !== null ? t('session.retakeN', { n: retake + 1 }) : method === 'manual' ? t('session.takeOne') : ready ? t('session.continueCountdown') : t('session.startCountdown')} <span aria-hidden="true">◎</span></button><button className="outline-button capture-stop" hidden={!busy} onClick={stopCapture}>{t('session.stopCountdown')}</button></div>
+      <p id="session-status" aria-live="polite">{statusText}</p>
+      <p id="camera-message" className="session-note" role="status">{cameraNote}</p>
+    </section>
+    <div className="stage-extras">
       <ScreenFlash active={flashLit} color={props.flashColor} view={view} />
-      <p id="camera-message" className="session-note" role="status">{message && message !== waitingPermission ? '' : message || (duo ? peer.connected ? t('session.bothConnected') : t('session.phase', { phase: tm(peer.phase) }) : t('session.staysHere'))}</p>
       <WarningNotice>{message !== waitingPermission ? message : ''}</WarningNotice>
       {duo && peer.error && <WarningNotice title={t('session.connectionTitle')}><p>{tm(peer.error)}</p><button className="outline-button" disabled={locked || !stream} onClick={peer.reconnect}>{t('session.reconnect')}</button></WarningNotice>}
-      {duo && peer.diagnostics && <details className="connection-details"><summary>{t('session.details')}</summary><p>{t('session.detailsHelp')}</p><pre>{peer.diagnostics}</pre><button className="text-button" onClick={async()=>{try{await navigator.clipboard.writeText(peer.diagnostics+"\n"+diagnosticReport());setStatus(t('session.detailsCopied'));}catch{setStatus(t('session.detailsManual'));}}}>{t('session.copyDetails')}</button></details>}
-      {guest && <p className="session-note">{t('session.guestNote')}</p>}
-      <details className="camera-settings"><summary>{t('session.settings')}</summary>{phoneCameras
-        ? <fieldset className="camera-facing" disabled={locked}><legend>{t('session.camera')}</legend>{(['user','environment'] as const).map(side => <label key={side}><input type="radio" name="camera-facing" value={side} checked={facing === side} onChange={() => { setFacing(side); props.onMirrorChange(side === 'user'); stopCamera(); void toggleCamera({ facing: side }); }} /> {t(side === 'user' ? 'session.front' : 'session.back')}</label>)}</fieldset>
-        : devices.length>1&&<label className="camera-device">{t('session.camera')} <select disabled={locked} value={stream?.getVideoTracks()[0]?.getSettings().deviceId||''} onChange={e=>{stopCamera();void toggleCamera({deviceId:e.target.value});}}>{devices.map((device,i)=><option key={device.deviceId} value={device.deviceId}>{device.label||t('session.cameraN', { n: i + 1 })}</option>)}</select></label>}<div className="capture-settings" hidden={guest}><fieldset disabled={locked}><legend>{t('session.how')}</legend>{(['timer', 'manual'] as const).map(value => <label key={value}><input type="radio" name="capture-method" value={value} checked={method === value} onChange={() => { props.onMethod(value); setStatus(''); }} /> {t(value === 'timer' ? 'session.withTimer' : 'session.manual')}</label>)}</fieldset><label className="timer-setting" hidden={method === 'manual'}>{t('session.countdown')}<select id="timer-seconds" value={seconds} disabled={locked} onChange={e => { props.onSeconds(Number(e.target.value)); setStatus(''); }}>{[3, 5, 7].map(value => <option key={value} value={value}>{t('session.seconds', { n: value })}</option>)}</select></label></div>
-      <div className="flash-settings" hidden={guest}>
-        <div className="flash-setting-heading"><div><strong>{t('session.flash')}</strong><p>{t('session.flashHelp')}</p></div><button type="button" className={`flash-toggle ${props.flash ? 'enabled' : ''}`} aria-pressed={props.flash} disabled={locked} onClick={() => props.onFlashChange(!props.flash)}>{t('session.flashState', { state: t(props.flash ? 'common.on' : 'common.off') })}</button></div>
-        {props.flash && <fieldset className="flash-colors" disabled={locked}><legend>{t('session.flashColor')}</legend>{Object.entries(flashColors).map(([key, value]) => <label key={key}><input type="radio" name="flash-color" value={key} checked={props.flashColor === key} onChange={() => props.onFlashColor(key as FlashColor)} /><span className="flash-color-dot" style={{ background: value.color }} aria-hidden="true" />{t(`flashColor.${key}` as Key)}</label>)}</fieldset>}
-        {props.flash && <p className="flash-note">{t('session.flashNote')}</p>}
-      </div>
-      <p className="session-note">{t('session.faceInside')}</p></details><p id="session-status" aria-live="polite">{guest ? t(remoteBusy ? 'session.guestTaking' : complete ? 'session.guestReady' : 'session.guestWaiting') : busy ? status : retake !== null ? defaultStatus : status || defaultStatus}</p>
-<div className="session-buttons"><button className="text-button" disabled={locked} onClick={props.onBack}>{t(duo ? 'session.leave' : 'upload.changeLayout')}</button>{retake !== null && !guest && <button className="text-button" disabled={locked} onClick={() => { props.onRetake(null); share({ type: 'retake', index: null }); setStatus(''); }}>{t('session.cancelRetake')}</button>}<button className="secondary" hidden={guest} disabled={locked || !complete || retake !== null} onClick={review}>{t('session.toEditing')}</button></div>
-      {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={previewShot} retake={retake} />}
       {duo&&syncCount>0&&<p className="session-note" role="status">{t(syncCount === 1 ? 'session.syncingOne' : 'session.syncing', { n: syncCount })}</p>}
       <WarningNotice title={t('session.syncTitle')}>{syncError&&<><p>{tm(syncError)}</p><button className="outline-button" disabled={!peer.connected} onClick={()=>{setSyncError('');void sync.current?.retry();}}>{t('session.retrySync')}</button>{!guest&&<button className="text-button" disabled={!peer.connected||busy} onClick={()=>{props.onRetake(sync.current?.pendingIndex()??null);setSyncError('');}}>{t('session.retakeUnsynced')}</button>}</>}</WarningNotice>
-      <PhotoTray shots={visibleShots} count={layout.count} retake={retake} disabled={locked || syncCount>0 || guest || (duo && !peer.connected)} onMove={props.onMove} onRetake={index => { props.onRetake(index); share({ type: 'retake', index }); }} />
+      {guest && <p className="session-note">{t('session.guestNote')}</p>}
+      <details className="camera-settings"><summary>{t('session.settings')}</summary>
+        <div className="camera-settings-body">
+          <button className="outline-button" id="camera-toggle" disabled={locked} onClick={()=>void toggleCamera()}>{t(stream ? 'session.cameraOff' : 'session.cameraOn')}</button>
+          {phoneCameras
+          ? <fieldset className="camera-facing" disabled={locked}><legend>{t('session.camera')}</legend>{(['user','environment'] as const).map(side => <label key={side}><input type="radio" name="camera-facing" value={side} checked={facing === side} onChange={() => { setFacing(side); props.onMirrorChange(side === 'user'); stopCamera(); void toggleCamera({ facing: side }); }} /> {t(side === 'user' ? 'session.front' : 'session.back')}</label>)}</fieldset>
+          : devices.length>1&&<label className="camera-device">{t('session.camera')} <select disabled={locked} value={stream?.getVideoTracks()[0]?.getSettings().deviceId||''} onChange={e=>{stopCamera();void toggleCamera({deviceId:e.target.value});}}>{devices.map((device,i)=><option key={device.deviceId} value={device.deviceId}>{device.label||t('session.cameraN', { n: i + 1 })}</option>)}</select></label>}
+          {props.flash && !guest && <fieldset className="flash-colors" disabled={locked}><legend>{t('session.flashColor')}</legend>{Object.entries(flashColors).map(([key, value]) => <label key={key}><input type="radio" name="flash-color" value={key} checked={props.flashColor === key} onChange={() => props.onFlashColor(key as FlashColor)} /><span className="flash-color-dot" style={{ background: value.color }} aria-hidden="true" />{t(`flashColor.${key}` as Key)}</label>)}</fieldset>}
+          {props.flash && !guest && <p className="flash-note">{t('session.flashNote')}</p>}
+          <p className="session-note">{t('session.faceInside')}</p>
+        </div>
+      </details>
+      {duo && peer.diagnostics && <details className="connection-details"><summary>{t('session.details')}</summary><p>{t('session.detailsHelp')}</p><pre>{peer.diagnostics}</pre><button className="text-button" onClick={async()=>{try{await navigator.clipboard.writeText(peer.diagnostics+"\n"+diagnosticReport());setStatus(t('session.detailsCopied'));}catch{setStatus(t('session.detailsManual'));}}}>{t('session.copyDetails')}</button></details>}
+      {card.template && <CameraCardPreview card={card} ready={canCapture && !locked} capture={previewShot} retake={retake} />}
     </div>
-  </>;
+  </div>;
 }

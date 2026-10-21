@@ -1,0 +1,210 @@
+/* ==========================================================================
+   Photo booth stage: the "Your photos" step (solo + duo) and the duo waiting room.
+   Goal: the live camera is visible as soon as the page opens, on desktop and phones.
+   - Desktop: the photo strip on the left, a big live camera on the right.
+   - Phones: camera first, the shutter right under it, then the photos in a row.
+   Loaded after the global styles, so these rules win over the older session styles.
+   ========================================================================== */
+
+/* ---------- Page chrome: keep the top of the booth short on the camera steps ---------- */
+.flow-booth:is([data-current-step="session"],[data-current-step="room"]){padding-top:18px}
+/* Billing note + auto-save sit under the booth on the camera step, so they don't push the camera down. */
+.flow-booth[data-current-step="session"] #flow-screen{display:flex;flex-direction:column}
+.flow-booth[data-current-step="session"] #flow-screen>:is(.recovery-options,p.recovery-status,div.session-note[aria-live]){order:2}
+.flow-booth[data-current-step="session"] #flow-screen>.recovery-options{width:100%;max-width:1240px;margin:14px auto 0;padding:6px 18px}
+.flow-booth[data-current-step="session"] #flow-screen>div.session-note[aria-live]{margin-top:14px}
+@media(min-width:900px){
+  /* One slim row: back link · progress dots · how it works. */
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]){display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:16px}
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]) .flow-top{display:contents}
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]) .flow-top>a{grid-column:1;grid-row:1}
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]) .flow-top>button{grid-column:3;grid-row:1}
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]) .flow-steps{grid-column:2;grid-row:1;margin:0;padding:0;border:0}
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]) .flow-steps li:not(.current)>span:last-child{display:none}
+  .flow-booth:is([data-current-step="session"],[data-current-step="room"]) #flow-screen{grid-column:1/-1;grid-row:2;min-width:0}
+}
+
+/* ---------- The stage card ---------- */
+.booth-stage{
+  /* Height the camera may use: the screen minus the header, the slim top row and the controls under the camera. */
+  --cam-h:clamp(300px,calc(100svh - 330px),760px);
+  position:relative;display:grid;grid-template-columns:236px minmax(0,1fr);gap:28px;align-items:stretch;
+  max-width:1240px;width:100%;margin:12px auto 0;padding:22px;border-radius:28px;
+  background:radial-gradient(circle at 0% 0%,#f6dfe0 0,#f6dfe000 38%),radial-gradient(circle at 100% 100%,#efe6c8 0,#efe6c800 40%),#fbf8f1;
+  border:1px solid #eadfd3;box-shadow:var(--shadow-md)
+}
+
+/* ---------- Left: the photo strip ---------- */
+/* height:0 + min-height:100% lets the strip take the camera column's height without stretching it. */
+.stage-strip{display:flex;flex-direction:column;gap:12px;height:0;min-height:100%;min-width:0}
+.strip-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.strip-head .eyebrow{font-size:11px;color:var(--ink)}
+.strip-head strong{font:italic 400 22px/1 var(--sans);color:var(--red)}
+.strip-paper{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;gap:8px;padding:12px 12px 10px;background:#fffdf7;
+  box-shadow:0 14px 26px #2528231c,0 1px 2px #25282314;transform:rotate(-1.4deg);transition:transform var(--dur-slow,.6s) var(--ease-out,ease)}
+.strip-paper:hover{transform:rotate(0)}
+/* A little piece of washi tape holding the strip. */
+.strip-paper::before{content:'';position:absolute;top:-11px;left:50%;width:76px;height:22px;background:#e7a2acb3;transform:translateX(-50%) rotate(3deg);box-shadow:0 1px 2px #0000000f}
+.booth-stage .photo-strip-tray{flex:1;min-height:0;display:flex;margin:0;padding:0;border:0;max-width:none}
+.booth-stage .photo-strip-tray .review-photos{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(var(--count),minmax(0,1fr));gap:8px}
+.booth-stage .photo-strip-tray .review-photo{min-height:0;border:0;padding:0;background:none;border-radius:0}
+.booth-stage .photo-strip-tray .review-image{position:relative;width:100%;height:100%;aspect-ratio:auto;border-radius:3px;background:#f1ebe0;overflow:hidden}
+.booth-stage .photo-strip-tray .review-image img{object-fit:cover;animation:strip-drop .45s var(--ease-out,ease) both}
+.booth-stage .photo-strip-tray .review-image>b{position:absolute;top:6px;left:6px;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:#fffdf7e6;color:var(--ink);font-size:11px;font-weight:700}
+.booth-stage .photo-strip-tray .selected-retake .review-image{outline:3px solid var(--red);outline-offset:2px}
+.booth-stage .photo-strip-tray .drop-target .review-image{outline:2px dashed var(--red);outline-offset:2px}
+.booth-stage .photo-strip-tray .dragging{opacity:.5}
+.strip-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1.5px dashed #d8c8bb;border-radius:3px;color:#c9a3a8}
+.strip-empty i{font:italic 400 20px/1 var(--sans);color:#b9a59a}
+.strip-photo-tools{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);display:flex;gap:4px;padding:3px;border-radius:999px;background:#262a27b3;backdrop-filter:blur(6px);opacity:0;transition:opacity var(--dur,.24s)}
+.review-image:hover .strip-photo-tools,.strip-photo-tools:focus-within{opacity:1}
+@media(hover:none){.strip-photo-tools{opacity:1}}
+.strip-photo-tools button{display:grid;place-items:center;width:28px;height:28px;padding:0;border:0;border-radius:50%;background:none;color:#fffdf7;font-size:13px;line-height:1}
+.strip-photo-tools button:hover:not(:disabled){background:#ffffff26}
+.strip-photo-tools button:disabled{opacity:.35;cursor:default}
+.strip-photo-tools .drag-handle{cursor:grab}
+.strip-arrow{transform:rotate(90deg)}  /* the strip is vertical on desktop, so earlier = up, later = down */
+.strip-foot{text-align:center;padding-top:2px}
+.strip-foot span{display:block;font:italic 400 19px/1.15 var(--sans);overflow-wrap:anywhere}
+.strip-foot small{display:block;margin-top:4px;font-size:9px;letter-spacing:1.3px;color:var(--muted);text-transform:uppercase}
+.strip-actions{display:flex;flex-direction:column;gap:4px}
+.booth-stage .strip-actions>:is(.primary,.secondary){width:100%;min-height:48px;display:inline-flex;align-items:center;justify-content:center;gap:10px;border-radius:999px;padding:13px 18px;font-size:14px;font-weight:600}
+.booth-stage .strip-actions>.secondary{background:#262a2724;border-color:transparent;color:#262a2799}
+.booth-stage .strip-actions>.text-button{width:100%;min-height:36px;padding:6px 0;text-align:center}
+
+/* ---------- Right: the big live camera ---------- */
+.stage-camera{display:flex;flex-direction:column;align-items:center;min-width:0}
+.session-view-wrap{width:100%;display:flex;justify-content:center}
+.booth-stage .session-view{width:min(100%,calc(var(--cam-h) * var(--photo-ratio)));aspect-ratio:var(--photo-ratio);max-height:none;margin:0;border-radius:22px;background:var(--ink);box-shadow:0 18px 40px #25282326}
+.booth-stage .duo-live-view{display:flex}
+.booth-stage .duo-live-view .camera-pane+.camera-pane{border-inline-start:3px solid #fffdf7}
+.booth-stage .camera-name{left:50%;bottom:14px;transform:translateX(-50%);z-index:4;background:#262a27b3;backdrop-filter:blur(6px);font-size:13px;padding:6px 12px;white-space:nowrap}
+.cam-live{position:absolute;top:14px;left:14px;z-index:4;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:#fffdf7e6;color:var(--ink);font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;pointer-events:none}
+.cam-live i{width:7px;height:7px;border-radius:50%;background:var(--red);animation:live-blink 1.4s ease-in-out infinite}
+.cam-tools{position:absolute;top:12px;right:12px;z-index:4;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.booth-stage .cam-tools .mirror-toggle{min-height:32px;padding:6px 12px;font-size:12px;border-color:transparent;background:#fffdf7e6;backdrop-filter:blur(6px)}
+.booth-stage .cam-tools .mirror-toggle.enabled{background:#262a27d9;color:#fffdf7}
+.cam-corner{position:absolute;z-index:3;width:28px;height:28px;border:2px solid #fffdf7b3;pointer-events:none}
+.cam-corner.tl{display:none}
+.cam-corner.tr{top:52px;right:16px;border-left:0;border-bottom:0;border-top-right-radius:8px}
+.cam-corner.bl{bottom:16px;left:16px;border-right:0;border-top:0;border-bottom-left-radius:8px}
+.cam-corner.br{bottom:16px;right:16px;border-left:0;border-top:0;border-bottom-right-radius:8px}
+/* While the countdown runs: a soft red glow around the camera. */
+.booth-stage .session-view.is-shooting{box-shadow:0 0 0 4px #a82e3e40,0 18px 40px #25282326}
+.booth-stage #shot-countdown{background:#26292733;font:italic 400 clamp(96px,14vw,190px)/1 var(--sans);color:#fffdf7;text-shadow:0 6px 30px #0006;animation:count-pop .5s var(--ease-out,ease) both}
+
+/* Controls under the camera: countdown length · shutter · flash. */
+.stage-controls{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px 16px;width:100%;margin-top:14px}
+.timer-chips{display:inline-flex;align-items:center;gap:2px;margin:0;padding:4px 4px 4px 12px;border:1px solid var(--line);border-radius:999px;background:#fffdf7;color:var(--muted);min-width:0}
+.timer-chips .icon{margin-right:4px}
+.timer-chips label{position:relative;cursor:pointer}
+.timer-chips input{position:absolute;opacity:0;width:1px;height:1px}
+.timer-chips span{display:block;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;transition:background var(--dur,.24s),color var(--dur,.24s)}
+.timer-chips label:has(input:checked) span{background:var(--ink);color:#fffdf7}
+.timer-chips label:has(input:focus-visible) span{outline:3px solid #576f92;outline-offset:2px}
+.timer-chips:disabled{opacity:.55}
+.booth-stage .capture-near-preview{margin:0;gap:10px}
+.booth-stage .shutter-button{min-height:54px;min-width:240px;padding:15px 28px;gap:12px;border-radius:999px;font-size:16px;font-weight:600;box-shadow:var(--shadow-red,0 6px 18px #a82e3e33)}
+.shutter-dot{width:14px;height:14px;flex:none;border-radius:50%;background:#fff8ee}
+.shutter-button:not(:disabled) .shutter-dot{animation:shutter-pulse 1.8s ease-out infinite}
+.booth-stage .capture-stop{min-height:54px;border-radius:999px;padding:0 20px}
+.booth-stage .flash-chip{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:8px 14px;background:#fffdf7}
+.booth-stage .flash-chip.enabled{background:#f3d36b;border-color:#e5c050;color:var(--ink)}
+.booth-stage #session-status{margin:10px 0 0;font-size:14px;line-height:1.5;color:var(--ink);text-align:center}
+.booth-stage #camera-message{margin:2px 0 0;font-size:12px;text-align:center}
+.booth-stage #camera-message:empty{display:none}
+
+/* ---------- Below: settings, warnings, connection help ---------- */
+.stage-extras{grid-column:1/-1;min-width:0}
+.booth-stage .camera-settings{margin:0;padding:2px 4px;border-bottom:0;border-top:1px solid #eadfd3}
+.camera-settings-body{display:grid;gap:4px;padding:6px 0 10px}
+.camera-settings-body #camera-toggle{justify-self:start}
+.camera-settings-body .flash-colors{margin:8px 0 0}
+
+@keyframes strip-drop{from{opacity:0;transform:translateY(-10px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes count-pop{from{opacity:0;transform:scale(1.5)}to{opacity:1;transform:scale(1)}}
+@keyframes shutter-pulse{0%{box-shadow:0 0 0 0 #fff8eecc}80%,100%{box-shadow:0 0 0 9px #fff8ee00}}
+@keyframes live-blink{50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){
+  .strip-paper,.strip-paper:hover{transform:none}
+  .booth-stage .photo-strip-tray .review-image img,.booth-stage #shot-countdown,.shutter-dot,.cam-live i{animation:none!important}
+}
+
+/* ---------- Phones and small tablets: camera first, photos in a row under it ---------- */
+@media(max-width:899px){
+  .booth-stage{--cam-h:min(46svh,520px);grid-template-columns:minmax(0,1fr);gap:14px;margin-top:4px;padding:12px;border-radius:22px}
+  .stage-camera{order:1}
+  .stage-strip{order:2;height:auto;min-height:0;gap:8px}
+  .stage-extras{order:3}
+  .booth-stage .session-view{border-radius:16px}
+  .stage-controls{margin-top:10px;gap:10px}
+  .booth-stage .capture-near-preview{order:-1;flex-basis:100%}
+  .booth-stage .shutter-button{flex:1;min-width:0}
+  .strip-head{padding:0 4px}
+  .strip-head strong{font-size:18px}
+  .strip-paper{transform:none;padding:8px;flex-direction:row;align-items:center;gap:10px}
+  .strip-paper:hover{transform:none}
+  .strip-paper::before{display:none}
+  .booth-stage .photo-strip-tray .review-photos{grid-template-rows:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+  .booth-stage .photo-strip-tray .review-image{height:clamp(72px,13svh,112px)}
+  .strip-arrow{transform:none}
+  .strip-photo-tools{bottom:4px;gap:0;padding:2px}
+  .strip-photo-tools button{width:26px;height:26px}
+  .strip-photo-tools .drag-handle{display:none}  /* the arrows do the job on small photos */
+  .strip-foot{display:none}
+  .strip-actions{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .booth-stage .strip-actions>:is(.primary,.secondary){flex:1 1 100%}
+  .booth-stage .strip-actions>.text-button{flex:1;width:auto}
+  .cam-live{top:10px;left:10px;padding:4px 8px;font-size:10px}
+  .cam-tools{top:8px;right:8px}
+  .booth-stage .cam-tools .mirror-toggle{min-height:30px;padding:5px 10px;font-size:11px}
+  .cam-corner{width:20px;height:20px}
+  .cam-corner.tr{top:46px;right:12px}.cam-corner.bl{bottom:12px;left:12px}.cam-corner.br{bottom:12px;right:12px}
+  .booth-stage .camera-name{bottom:10px;font-size:12px;padding:5px 10px}
+}
+@media(max-width:899px) and (max-width:420px){
+  .booth-stage .duo-live-view .camera-name{font-size:11px}
+  .booth-stage .duo-live-view .cam-corner{display:none}
+}
+
+/* ---------- Duo waiting room: compact heading, camera beside the party details ---------- */
+.flow-booth[data-current-step="room"] .flow-heading{margin:14px auto 18px}
+.flow-booth[data-current-step="room"] .flow-heading h1{font-size:clamp(32px,3.6vw,46px)!important;letter-spacing:-1px;margin:6px 0 8px!important}
+.flow-booth[data-current-step="room"] .flow-heading p{font-size:14px}
+.booth .room-stage{max-width:1180px;margin:0 auto 32px;padding:22px;border-radius:28px;border:1px solid #eadfd3;box-shadow:var(--shadow-md);
+  background:radial-gradient(circle at 0% 0%,#f6dfe0 0,#f6dfe000 38%),radial-gradient(circle at 100% 100%,#efe6c8 0,#efe6c800 40%),#fbf8f1}
+.booth .room-stage:not(.has-camera){max-width:720px}
+.room-stage.has-camera{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:start}
+.room-stage .waiting-camera{margin:0;padding:0;border:0}
+.waiting-video{position:relative;color:#fffdf7;width:min(100%,calc((100svh - 330px) * 4 / 3));min-width:min(100%,320px);aspect-ratio:4/3;margin:0 auto;border-radius:22px;overflow:hidden;background:var(--ink);box-shadow:0 18px 40px #25282326}
+.room-stage .waiting-video video{position:absolute;inset:0;width:100%;height:100%;max-width:none;aspect-ratio:auto;border-radius:0;object-fit:cover}
+.waiting-video .camera-placeholder>span{color:#e7a2ac}
+.waiting-video .camera-placeholder p{max-width:300px}
+.waiting-video>.mirror-toggle{position:absolute;top:12px;right:12px;z-index:4;min-height:32px;padding:6px 12px;font-size:12px;border-color:transparent;background:#fffdf7e6}
+.waiting-video>.mirror-toggle.enabled{background:#262a27d9;color:#fffdf7;border-color:#fffdf766}
+.room-side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.room-side .room-people{gap:10px}
+.room-side .room-person{padding:16px 10px;gap:6px;background:#fffdf7;border:1px solid #eee3d6;transition:border-color var(--dur,.24s),background var(--dur,.24s)}
+.room-side .room-person.is-ready{border-color:#a82e3e55;background:#fbeeee}
+.room-side .room-person.is-ready .room-heart svg{fill:currentColor}
+.room-side .room-status{margin:0;text-align:center}
+.room-side .room-actions>button{flex:1;min-height:50px;border-radius:999px}
+.room-side .room-invitation{margin:0;padding:14px 16px;border:1px dashed #d8c8bb;border-radius:16px;background:#fffdf7}
+.room-side .room-invitation label{margin:12px 0 6px}
+.room-side .room-invitation .session-note{margin:10px 0 0;font-size:13px}
+.room-side.guest-here .room-invitation{order:5}   /* once your person is here, the invite moves down */
+.room-side .room-stage-note{order:6;margin:0;padding-top:12px;font-size:13px}
+.room-side .room-leave{order:7;align-self:center;padding:4px 0}
+@media(max-width:899px){
+  .booth .room-stage{padding:12px;border-radius:22px}
+  .room-stage.has-camera{grid-template-columns:minmax(0,1fr);gap:16px}
+  .waiting-video{width:min(100%,calc(40svh * 4 / 3));min-width:0;border-radius:16px}
+  .flow-booth[data-current-step="room"] .flow-heading{margin:6px auto 12px}
+  .flow-booth[data-current-step="room"] .flow-heading h1{font-size:30px!important}
+  .flow-booth[data-current-step="room"] .flow-heading .eyebrow{display:none}
+  .flow-booth[data-current-step="room"] .flow-heading p{font-size:13px;line-height:1.5}
+  /* On phones the "I'm ready" button comes right after the camera. */
+  .room-side .room-actions{order:-2}
+  .room-side .room-status{order:-1}
+  .waiting-video .camera-placeholder p{display:block;font-size:13px}
+}
