@@ -21,6 +21,7 @@ pnpm build             # production build
 | [AUTH_SETUP.md](AUTH_SETUP.md) | Google and email sign-in |
 | [AUTH-SECURITY-SETUP.md](AUTH-SECURITY-SETUP.md) | Branded auth emails (Resend) and sign-in protection |
 | [AUTH_PROTECTION_SETUP.md](AUTH_PROTECTION_SETUP.md) | Captcha and rate limits |
+| [PAYMENTS-PLAYBOOK.md](PAYMENTS-PLAYBOOK.md) | **Start here for payments:** how they work, how to pause, how to switch back on |
 | [WALLET_SETUP.md](WALLET_SETUP.md) / [TOPUP_SETUP.md](TOPUP_SETUP.md) | Points wallet and top-ups |
 | [PAYMENT-EMAIL-SETUP.md](PAYMENT-EMAIL-SETUP.md) | Payment notification emails |
 | [ROOMS.md](ROOMS.md) / [DUO-CONNECTION-SETUP.md](DUO-CONNECTION-SETUP.md) | Duo booth rooms and camera connection |

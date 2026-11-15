@@ -106,3 +106,21 @@ export const formatDateTime = (value: string | number | Date) => new Date(value)
 export const formatTime = (value: string | number | Date) => new Date(value).toLocaleTimeString(localeOf(), { hour: '2-digit', minute: '2-digit' });
 /** Numbers keep Western digits and commas in every language (prices must match KBZPay). */
 export const num = (value: number) => value.toLocaleString('en-US');
+
+/**
+ * A calendar date written out in full, e.g. "2026-12-31" → "31 December 2026" /
+ * "၃၁ ဒီဇင်ဘာ ၂၀၂၆" / "31 tháng 12, 2026". Some browsers have no Burmese date data
+ * and fall back to English, so Burmese is built by hand.
+ */
+export function formatLongDate(isoDate: string, locale: string = localeOf()) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  if (locale === 'my') {
+    const months = ['ဇန်နဝါရီ', 'ဖေဖော်ဝါရီ', 'မတ်', 'ဧပြီ', 'မေ', 'ဇွန်', 'ဇူလိုင်', 'ဩဂုတ်', 'စက်တင်ဘာ', 'အောက်တိုဘာ', 'နိုဝင်ဘာ', 'ဒီဇင်ဘာ'];
+    const digits = (n: number) => String(n).replace(/\d/g, d => '၀၁၂၃၄၅၆၇၈၉'[Number(d)]); // 2026 → ၂၀၂၆
+    return `${digits(date.getUTCDate())} ${months[date.getUTCMonth()]} ${digits(date.getUTCFullYear())}`;
+  }
+  // English uses the British order ("31 December 2026"), like the policy pages.
+  try { return new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : locale, { dateStyle: 'long', timeZone: 'UTC' }).format(date); }
+  catch { return isoDate; } // very old browsers
+}

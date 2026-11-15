@@ -1,0 +1,16 @@
+# Big local files that must never go to GitHub (the repo is public).
+# Launch-video renders (~1 GB each) and other video files:
+brag-output*/
+*.mp4
+*.mov
+
+# Local tool settings
+.claude/skills/
+skills-lock.json
+.claude/settings.local.json
+
+# Builds and secrets (website/.gitignore covers the app folder too)
+dist/
+.env
+.env.*
+!.env.example

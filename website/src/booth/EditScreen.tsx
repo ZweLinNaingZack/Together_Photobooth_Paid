@@ -16,6 +16,7 @@ import {localDate} from './filmDate.js';
 import { useT, type Key } from '../i18n';
 import { Rich } from '../i18n/Rich';
 import { Icon } from '../components/Icon';
+import { useFreeMode } from '../auth/freeMode';
 import { layoutName, layoutNote } from '../i18n/layouts';
 
 interface Props {
@@ -28,6 +29,7 @@ interface Props {
 }
 export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign, onContinue, stage, source = 'camera', photosLocked = false }: Props) {
   const t = useT();
+  const { free } = useFreeMode();   // the "Buy me a coffee" card only shows while Together is free
   const [preview, setPreview] = useState('');
   const [expanded,setExpanded]=useState(false);
   const [today,setToday]=useState(localDate);
@@ -116,6 +118,13 @@ export function EditScreen({ card, onChange, onMove, onRetake, onBack, onDesign,
     {stage === 'export' && readyExport && <div className="session-note export-help"><a className="outline-button" href={readyExport.url} target="_blank" rel="noopener noreferrer"><Icon name="expand" size={16} />{t('edit.openFull')}</a><p>{t('edit.phoneSave')}</p>{typeof navigator.share==='function' && <button className="outline-button" onClick={async()=>{const file=new File([readyExport.blob],`Together Memories.${format==='jpeg'?'jpg':'png'}`,{type:readyExport.blob.type});try{if(!navigator.canShare?.({files:[file]})){setStatus(t('edit.shareUnavailable'));return;}await navigator.share({files:[file],title:'Together Memories'});setStatus(t('edit.shareOpened'));}catch(e){if(!(e instanceof DOMException&&e.name==='AbortError'))setStatus(t('edit.shareFailed'));}}}><Icon name="send" size={16} />{t('edit.share')}</button>}</div>}
     {stage === 'export' && <div className="finish-bottom download-card"><span className="download-icon" aria-hidden="true"><Icon name="download" size={24} /></span><div className="download-text"><strong>{t('edit.keep')}</strong><p>{t('edit.pixels', { w: width, h: height })} {card.template ? t('edit.sizeDesign') : t('edit.sizePrint', { w: layout.width / 300, h: layout.height / 300 })}</p><button className="text-button back-step" onClick={onDesign} disabled={exporting}><Icon name="arrowLeft" size={16} />{t('edit.backToDesign')}</button></div><div className="finish-buttons"><button className="primary" id="download-card" disabled={exporting} onClick={() => exportCard(false)}><Icon name="download" size={18} />{t('edit.download')}</button></div><p id="export-status" role="status">{failed ? '' : status}</p>{failed && <WarningNotice>{status}</WarningNotice>}</div>}
     <ExpandedPhotoEditor open={expanded} onClose={()=>setExpanded(false)} preview={preview} card={card} onChange={onChange}/>
+    {/* "Buy me a coffee": optional KBZPay donation, right after the download. On a phone you can't scan
+        your own screen, so "Save QR code" downloads the image to open from KBZPay's scanner. */}
+    {stage === 'export' && free && <section className="support-card" aria-labelledby="support-title">
+      <div className="support-copy"><span className="eyebrow">{t('support.eyebrow')}</span><h2 id="support-title"><Icon name="heart" size={22} />{t('support.title')}</h2><p>{t('support.text')}</p><p className="support-howto">{t('support.howTo')}</p>
+        <a className="outline-button support-save" href="/kbzpay-payment.jpg" download="Together-KBZPay-QR.jpg"><Icon name="download" size={16} />{t('support.save')}</a><p className="support-thanks">{t('support.thanks')}</p></div>
+      <img className="support-qr" src="/kbzpay-payment.jpg" alt={t('support.qrAlt')} width="220" height="300" loading="lazy" />
+    </section>}
     {stage === 'export' && <div className="done-actions"><p>{t('edit.saveBeforeLeaving')}</p><button className="outline-button" disabled={exporting} onClick={()=>{window.location.hash='#';}}><Icon name="home" size={16} />{t('edit.done')}</button></div>}
   </>;
 }

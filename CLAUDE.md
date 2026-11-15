@@ -97,7 +97,10 @@ new admin email switch finished; production Vercel functions run in sin1 (Singap
 
 Check with me which of these are done:
 1. Translations need some fixes (owner will list them), then merge staging → master.
-2. Later: remove the old admin (last commented line in `020-new-admin-email.sql`).
+2. Old admin removed (done, Nov 2026). Still to do: Google sign-in branding (app name + support
+   email), Supabase `SUPPORT_EMAIL` secret + redeploy `auth-email` with `--no-verify-jwt`.
+2b. Plan (Nov 2026): free promotion until 31 Dec 2026 with donations; payments paused, not removed.
+   See `website/PAYMENTS-PLAYBOOK.md` before touching anything payment-related.
 3. Native speakers should proofread `my.ts` / `vi.ts` (Burmese font couldn't be checked in the cloud).
 4. Change `LAST_UPDATED` in `src/pages/Legal.tsx` on launch day; get policies reviewed.
 5. Before launch: Vercel Pro (Hobby is non-commercial), Supabase Pro (backups), make repo private,

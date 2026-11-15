@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
-import { useLang } from '../i18n';
+import { formatLongDate, useLang } from '../i18n';
+import { useFreeMode } from '../auth/freeMode';
 import { LEGAL_LANGUAGES, type ContactId, type LangCode, type PageId } from './legalText';
 import { Icon, type IconName } from '../components/Icon';
 
@@ -8,7 +9,7 @@ import { Icon, type IconName } from '../components/Icon';
 // The words live in legalText.ts; this file only lays them out.
 // Change LAST_UPDATED whenever the wording changes, e.g. on launch day.
 // ---------------------------------------------------------------------------
-export const LAST_UPDATED = '2026-10-10'; // year-month-day; shown in each language's date style
+export const LAST_UPDATED = '2026-11-12'; // year-month-day; shown in each language's date style
 const OPERATOR = 'Zwe Lin Naing';
 const CONTACT = 'togetherphotobooth.xyz@gmail.com';
 
@@ -21,18 +22,8 @@ const CONTACTS: { id: ContactId; shown: string; href: string; kind: 'call' | 'wr
   { id: 'facebook', shown: '', href: '', kind: 'open' }, // e.g. shown: 'Together Photobooth', href: 'https://facebook.com/...'
   { id: 'telegram', shown: '', href: '', kind: 'open' }, // e.g. shown: '@togetherphotobooth', href: 'https://t.me/...'
 ];
-/** "2026-10-10" → "10 October 2026" / "၂၀၂၆ အောက်တိုဘာ ၁၀" / "10 tháng 10, 2026". */
-function formatDate(locale: string) {
-  const date = new Date(`${LAST_UPDATED}T12:00:00Z`);
-  // Some browsers have no Burmese date data and fall back to English, so build it by hand.
-  if (locale === 'my') {
-    const months = ['ဇန်နဝါရီ', 'ဖေဖော်ဝါရီ', 'မတ်', 'ဧပြီ', 'မေ', 'ဇွန်', 'ဇူလိုင်', 'ဩဂုတ်', 'စက်တင်ဘာ', 'အောက်တိုဘာ', 'နိုဝင်ဘာ', 'ဒီဇင်ဘာ'];
-    const digits = (n: number) => String(n).replace(/\d/g, d => '၀၁၂၃၄၅၆၇၈၉'[Number(d)]); // 2026 → ၂၀၂၆
-    return `${digits(date.getUTCDate())} ${months[date.getUTCMonth()]} ${digits(date.getUTCFullYear())}`;
-  }
-  try { return new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeZone: 'UTC' }).format(date); }
-  catch { return LAST_UPDATED; } // very old browsers
-}
+/** LAST_UPDATED in the page's language (the formatter is shared, in i18n/index.ts). */
+const formatDate = (locale: string) => formatLongDate(LAST_UPDATED, locale);
 
 /**
  * Turns the small markup in legalText.ts into React elements:
@@ -68,6 +59,7 @@ function TopBar({ lang }: { lang: LangCode }) {
 function LegalPage({ id }: { id: PageId }) {
   const { lang, text } = usePolicyLang();
   const page = text.pages[id];
+  const { free, until } = useFreeMode();
 
   // lang="" tells browsers and screen readers which language the text is in
   // (it also helps the browser pick a font that has Burmese letters).
@@ -77,6 +69,8 @@ function LegalPage({ id }: { id: PageId }) {
       <h1 id={`${id}-title`}>{page.title}</h1>
       <p className="legal-updated">{text.updated} {formatDate(text.locale)}</p>
       {text.notice && <p className="legal-notice">{text.notice}</p>}
+      {/* While the booth is free (021-free-mode.sql), each policy explains it first. */}
+      {free && <p className="legal-free-notice">{rich(text.freePeriod[id].replace('{date}', until ? formatLongDate(until, text.locale) : ''))}</p>}
       <div className="legal-intro"><p>{rich(page.intro)}</p></div>
     </header>
     <div className="legal-body">

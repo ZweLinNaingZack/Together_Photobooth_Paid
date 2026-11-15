@@ -34,7 +34,7 @@ import { prefetchFrames } from './frameAssets';
 import { reconcileOffsets } from './photoPosition.js';
 import { useAuth } from '../auth/AuthProvider';
 import { readDraft,saveDraft,deleteDraft,readActiveSession,saveActiveSession,deleteActiveSession } from './recoveryStore.js';
-import { formatTime, tm, useT } from '../i18n';
+import { formatLongDate, formatTime, tm, useT } from '../i18n';
 
 /**
  * A "Your photos" session saved on this device before editing is confirmed.
@@ -450,6 +450,8 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
   }
   // While the user decides about an unfinished session, only the resume panel is shown.
   const showSteps = active && !conflict;
+  // Free mode: the session costs nothing; freeDate is e.g. "31 December 2026" in the current language.
+  const freeDate = charge.free && charge.freeUntil ? formatLongDate(charge.freeUntil) : '';
   const progress: [Step, string][] = [['mode', t('booth.step.mode')], ['source', t('booth.step.source')], ['layout', t('booth.step.layout')], ['session', t('booth.step.session')], ['design', t('booth.step.design')], ['export', t('booth.step.export')]];
   const visibleProgress: [Step, string][] = mode === 'duo' && ['duo', 'join', 'room'].includes(step) ? [['duo', t('booth.step.duo')], ['join', t('booth.step.join')], ['room', t('booth.step.room')]] : progress;
   // Which step of the progress bar we're on ("upload" shares the photos step); earlier steps are shown as done.
@@ -473,7 +475,7 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
           {/active booth/i.test(charge.error) ? <p>{t('booth.alreadyOpenText')}</p> : <p>{tm(charge.error)}</p>}
           {needsPoints(charge.error) && <><a href="#account/buy" target="_blank" rel="noopener noreferrer">{t('booth.topUp')}</a><p>{t('booth.photosStay')}</p></>}</WarningNotice>}
         {active && ['session','upload','design','export'].includes(step) && <div className="session-note" aria-live="polite">
-          {party.room?.role === 'guest' ? t('booth.guestCovered') : charge.busy ? t('booth.confirmingSession') : charge.receipt ? tm(charge.receipt) : t('booth.nothingYet')}
+          {party.room?.role === 'guest' ? t('booth.guestCovered') : charge.busy ? t('booth.confirmingSession') : charge.receipt ? tm(charge.receipt) : charge.free ? t('booth.nothingYet.free', { date: freeDate }) : t('booth.nothingYet')}
         </div>}
         {showSteps && step === 'mode' && <ModeScreen onChoose={choice => { setMode(choice); clearPhotos(); change({template:null}); setStep('source'); }} />}
         {showSteps && step === 'duo' && <DuoChoice onCreate={() => { party.end(); setStep('layout'); }} onJoin={() => { party.end(); setUseInvite(false); setStep('join'); }} onBack={() => setStep('source')} />}
@@ -492,8 +494,8 @@ export function Booth({ active, invite, leaveGuard }: { active: boolean; invite:
     <Instructions open={active && !savedDraft && !conflict && instructions && !disconnectOpen && !pendingLeave && !confirmation.open} onDismiss={() => setInstructions(false)} onContinue={() => setInstructions(false)} />
     <div id="print-sheet" aria-hidden="true" />
     <LeaveDialog duo={duoActive} open={!!pendingLeave} count={duoUploads.some(Boolean) ? duoUploads.filter(Boolean).length : card.shots.filter(Boolean).length} onCancel={() => setPendingLeave(null)} onConfirm={() => { const proceed = pendingLeave; setPendingLeave(null); void duoControl.current?.({type:'leave'}).catch(() => {}); clearPhotos(); proceed?.(); }} />
-    <BoothDialog open={active && confirmation.open && !disconnectOpen && !pendingLeave} title={t('booth.confirm.title')} cancelLabel={t('booth.confirm.cancel')} confirmLabel={t(charge.cost === 0 ? 'booth.confirm.trial' : 'booth.confirm.points')} busy={confirmation.busy} error={confirmation.error} onCancel={() => editingGate.current?.cancel()} onConfirm={() => void editingGate.current?.confirm()}>
-      <p>{charge.cost === 0 ? t('booth.confirm.textTrial') : t('booth.confirm.textPoints', { n: charge.cost ?? 100 })}</p>
+    <BoothDialog open={active && confirmation.open && !disconnectOpen && !pendingLeave} title={t('booth.confirm.title')} cancelLabel={t('booth.confirm.cancel')} confirmLabel={t(charge.free ? 'booth.confirm.free' : charge.cost === 0 ? 'booth.confirm.trial' : 'booth.confirm.points')} busy={confirmation.busy} error={confirmation.error} onCancel={() => editingGate.current?.cancel()} onConfirm={() => void editingGate.current?.confirm()}>
+      <p>{charge.free ? t('booth.confirm.textFree', { date: freeDate }) : charge.cost === 0 ? t('booth.confirm.textTrial') : t('booth.confirm.textPoints', { n: charge.cost ?? 100 })}</p>
     </BoothDialog>
     <BoothDialog open={disconnectOpen} title={t('booth.lost.title')} cancelLabel={t('booth.lost.stay')} confirmLabel={t('booth.lost.leave')} busy={confirmation.busy} onCancel={() => { setDisconnectAcknowledged(true); void party.check(); }} onConfirm={() => { editingGate.current?.cancel(); clearPhotos(); party.end(); setStep('mode'); }}>
       <p>{t(explicitDisconnect ? 'booth.lost.left' : 'booth.lost.connection')} {t('booth.lost.question')}</p>

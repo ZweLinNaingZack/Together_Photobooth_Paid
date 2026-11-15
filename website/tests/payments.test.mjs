@@ -234,5 +234,30 @@ test('wallet and top-ups isolate users and credit approved transfers exactly onc
     await as(alice);assert.equal((await wallet()).points,before+receiptOnly.points,'reference-free approval credits once');
     await db.exec('reset role');
     assert.equal((await db.query("select count(*)::int as n from together_email_jobs where order_id=$1 and event='approved'",[receiptOnly.id])).rows[0].n,1);
+
+    // 021: free mode. Sessions cost nothing, nobody's one-time free session is used up,
+    // and switching it off brings the normal rules back without touching balances.
+    await db.exec(await readFile(new URL('../021-free-mode.sql',import.meta.url),'utf8'));
+    const carol = '55555555-5555-4555-8555-555555555555';
+    await db.query("insert into auth.users(id,email,email_confirmed_at) values($1,'carol@gmail.com',now())",[carol]);
+    const freeInfo = async () => (await db.query('select together_free_mode() as f')).rows[0].f;
+    await as('', 'anon'); assert.deepEqual(await freeInfo(), { free: true, until: '2026-12-31' }, 'anyone can see the free period');
+    await as(carol);
+    const freeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const reserved = await action(freeId, 'reserve');
+    assert.equal(reserved.free, true); assert.equal(reserved.used_trial, false);
+    assert.equal((await wallet()).reserved_points, 0, 'a free booth holds no points');
+    assert.equal((await complete(freeId)).free, true);
+    assert.equal((await wallet()).points, 0, 'nothing is charged');
+    assert.equal((await wallet()).trial_available, true, 'the one-time free session is kept for later');
+    const bobPoints = (await (async () => { await as(bob); return (await wallet()).points; })());
+    await as(bob); await action('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'reserve');
+    // Switching free mode off mid-session: the booth reserved while free stays free.
+    await db.exec('reset role'); await db.exec('update together_settings set free_mode = false');
+    await as(bob); await complete('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    assert.equal((await wallet()).points, bobPoints, 'a booth reserved while free is never charged');
+    // Normal rules are back: Carol's one free session is still there for her next booth.
+    await as(carol); assert.equal((await action('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'reserve')).used_trial, true);
+    await as(carol, 'authenticated'); await assert.rejects(() => db.query('select * from together_settings'), /permission denied/);
   } finally { await db.close(); }
 });

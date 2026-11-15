@@ -22,6 +22,7 @@ export type LegalLanguage = {
   back: string;
   updated: string;   // "Last updated" (the date is added after it)
   notice?: string;   // translation note; English has none
+  freePeriod: Record<PageId, string>; // shown at the top of each policy while the booth is free ({date}, {mail})
   pickLabel: string; // screen-reader name of the language buttons
   pages: Record<PageId, Page>;
   contact: ContactText;
@@ -40,6 +41,11 @@ type ContactText = {
 
 const en: LegalLanguage = {
   label: 'English', locale: 'en-GB', back: 'Back home', updated: 'Last updated', pickLabel: 'Language',
+  freePeriod: {
+    terms: '**Free period:** until {date}, all booth sessions are free and no points are needed or taken. Points you already bought stay in your account for when paid sessions return. You may support us with an optional donation by KBZPay. Donations are voluntary gifts: they do not buy any service or points and are not refundable. We will announce any return to paid sessions on this website before it happens.',
+    privacy: '**Free period:** until {date}, no payments are taken. If you choose to send a donation by KBZPay, we only see what KBZPay shows us (such as the sender name and amount), and we use it only to keep a record of donations.',
+    refunds: '**Free period:** until {date}, no payments are taken for sessions and buying points is paused. Points you already have stay in your account. Optional donations are voluntary gifts and cannot be refunded; if you sent one by mistake, please contact {mail}.',
+  },
   contact: {
     title: 'Contact us',
     intro: 'Need help with a booth, your points or a payment? For any support, you can find us on these platforms. We will get back to you as soon as we can.',
@@ -155,6 +161,11 @@ const en: LegalLanguage = {
 
 const my: LegalLanguage = {
   label: 'မြန်မာ', locale: 'my', back: 'ပင်မစာမျက်နှာသို့', updated: 'နောက်ဆုံး ပြင်ဆင်သည့်ရက်', pickLabel: 'ဘာသာစကား',
+  freePeriod: {
+    terms: '**အခမဲ့ကာလ -** {date} အထိ booth session အားလုံး အခမဲ့ဖြစ်ပြီး points မလိုအပ်ပါ၊ နုတ်ယူခြင်းလည်း မရှိပါ။ သင်ဝယ်ယူထားပြီးသော points များကို ငွေပေးရသော session များ ပြန်လည်စတင်သည့်အခါ အသုံးပြုနိုင်ရန် သင့်အကောင့်တွင် ဆက်လက်ထားရှိပါမည်။ KBZPay ဖြင့် မိမိဆန္ဒအလျောက် လှူဒါန်း၍ ကူညီနိုင်ပါသည်။ လှူဒါန်းငွေများသည် စေတနာအလျောက် ပေးသော လက်ဆောင်ဖြစ်ပြီး ဝန်ဆောင်မှု သို့မဟုတ် points ဝယ်ယူခြင်း မဟုတ်သဖြင့် ပြန်အမ်းပေးမည် မဟုတ်ပါ။ ငွေပေးရသော session များ ပြန်လည်စတင်မည်ဆိုပါက ဤဝက်ဘ်ဆိုက်တွင် ကြိုတင်ကြေညာပါမည်။',
+    privacy: '**အခမဲ့ကာလ -** {date} အထိ ငွေကောက်ခံခြင်း မရှိပါ။ KBZPay ဖြင့် လှူဒါန်းရန် ရွေးချယ်ပါက KBZPay က ပြသသော အချက်အလက်များ (ဥပမာ - ပေးပို့သူအမည်နှင့် ပမာဏ) ကိုသာ ကျွန်ုပ်တို့ မြင်ရပြီး လှူဒါန်းမှု မှတ်တမ်းထားရန်အတွက်သာ အသုံးပြုပါသည်။',
+    refunds: '**အခမဲ့ကာလ -** {date} အထိ session များအတွက် ငွေကောက်ခံခြင်း မရှိဘဲ points ဝယ်ယူခြင်းကိုလည်း ယာယီရပ်နားထားပါသည်။ သင့်တွင် ရှိပြီးသား points များ သင့်အကောင့်ထဲတွင် ဆက်ရှိနေပါမည်။ မိမိဆန္ဒအလျောက် လှူဒါန်းငွေများကို ပြန်အမ်းပေး၍ မရပါ။ မှားယွင်း ပေးပို့မိပါက {mail} သို့ ဆက်သွယ်ပါ။',
+  },
   contact: {
     title: 'ဆက်သွယ်ရန်',
     intro: 'Booth၊ points သို့မဟုတ် ငွေပေးချေမှုနှင့် ပတ်သက်၍ အကူအညီ လိုပါသလား။ အကူအညီ လိုအပ်ပါက အောက်ပါ နည်းလမ်းများဖြင့် ကျွန်ုပ်တို့ကို ဆက်သွယ်နိုင်ပါသည်။ တတ်နိုင်သမျှ အမြန်ဆုံး ပြန်လည် ဆက်သွယ်ပေးပါမည်။',
@@ -270,6 +281,11 @@ const my: LegalLanguage = {
 
 const vi: LegalLanguage = {
   label: 'Tiếng Việt', locale: 'vi', back: 'Về trang chủ', updated: 'Cập nhật lần cuối', pickLabel: 'Ngôn ngữ',
+  freePeriod: {
+    terms: '**Thời gian miễn phí:** đến {date}, mọi phiên booth đều miễn phí, không cần và không trừ điểm. Điểm bạn đã mua vẫn được giữ trong tài khoản để dùng khi phiên trả phí quay lại. Bạn có thể ủng hộ chúng tôi bằng một khoản quyên góp tự nguyện qua KBZPay. Khoản quyên góp là món quà tự nguyện: không dùng để mua dịch vụ hay điểm và không được hoàn lại. Chúng tôi sẽ thông báo trên trang web này trước khi phiên trả phí quay lại.',
+    privacy: '**Thời gian miễn phí:** đến {date}, chúng tôi không thu bất kỳ khoản thanh toán nào. Nếu bạn chọn quyên góp qua KBZPay, chúng tôi chỉ thấy thông tin KBZPay hiển thị (như tên người gửi và số tiền) và chỉ dùng để lưu lại các khoản quyên góp.',
+    refunds: '**Thời gian miễn phí:** đến {date}, không thu phí cho các phiên và việc mua điểm được tạm dừng. Điểm bạn đang có vẫn được giữ trong tài khoản. Các khoản quyên góp tự nguyện không được hoàn lại; nếu bạn gửi nhầm, vui lòng liên hệ {mail}.',
+  },
   contact: {
     title: 'Liên hệ',
     intro: 'Bạn cần hỗ trợ về booth, điểm hoặc thanh toán? Bạn có thể liên hệ với chúng tôi qua các kênh dưới đây. Chúng tôi sẽ phản hồi sớm nhất có thể.',

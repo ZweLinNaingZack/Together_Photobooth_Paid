@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { reserveSession } from './reserveSession.mjs';
 import { supabase } from '../auth/client';
+import { loadFreeMode } from '../auth/freeMode';
+
+// Receipt shown after confirming a session in free mode (also in en.ts as 'msg.freeUsed', so tm() translates it).
+const FREE_RECEIPT = 'Free session. Nothing was charged. Retakes and downloads in this session are included.';
 
 export function useSessionCharge() {
   const id = useRef<string>(crypto.randomUUID());
@@ -9,18 +13,21 @@ export function useSessionCharge() {
   const settled = useRef(false);
   const costRef = useRef<number | null>(null);
   const [cost, setCost] = useState<number | null>(null);
+  // Free mode (021-free-mode.sql): this session costs nothing; freeUntil is the date shown to the user.
+  const [free, setFree] = useState(false), [freeUntil, setFreeUntil] = useState<string | null>(null);
+  function markFree(value: boolean) { setFree(value); if (value) void loadFreeMode().then(mode => setFreeUntil(mode.until)); }
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [receipt, setReceipt] = useState('');
   function reset() {
     void supabase?.rpc('together_session_action', { request_id: id.current, operation: 'release' }).then(() => {}, () => {});
     generation.current++; reservePending.current = null;
     id.current = crypto.randomUUID(); pending.current = null; settled.current = false;
     setBusy(false); setError(''); setReceipt('');
-    costRef.current = null; setCost(null);
+    costRef.current = null; setCost(null); setFree(false);
   }
   async function resume(sessionId:string){
     const {data,error}=await supabase!.rpc('together_resume_session',{request_id:sessionId});
     if(error||!data?.completed)throw new Error('We could not verify this paid session. Your saved photos have been kept. Please try again.');
-    id.current=data.session_id;settled.current=true;setReceipt('Resumed session. Editing and downloads are already covered.');setCost(data.used_trial?0:100);
+    id.current=data.session_id;settled.current=true;setReceipt('Resumed session. Editing and downloads are already covered.');setCost(data.free||data.used_trial?0:100);markFree(!!data.free);
   }
   /**
    * Re-attach this tab to a reservation made before a refresh/tab close.
@@ -44,7 +51,7 @@ export function useSessionCharge() {
     generation.current++; reservePending.current = null; pending.current = null;
     id.current = crypto.randomUUID(); settled.current = false;
     setBusy(false); setError(''); setReceipt('');
-    costRef.current = null; setCost(null);
+    costRef.current = null; setCost(null); setFree(false);
   }
   /** Ask the server for this user's unfinished reservation (migration 019). */
   async function findActive(): Promise<ActiveReservation | null> {
@@ -79,7 +86,7 @@ export function useSessionCharge() {
           throw new Error('This session has ended.');
         }
         id.current = data.session_id; settled.current = data.completed;
-        costRef.current = data.used_trial ? 0 : 100; setCost(costRef.current);
+        costRef.current = data.free || data.used_trial ? 0 : 100; setCost(costRef.current); markFree(!!data.free);
       } catch (e) { if (version === generation.current) setError(e instanceof Error ? e.message : 'Please retry authorization.'); throw e; }
       finally { if (version === generation.current) { reservePending.current = null; if (!pending.current) setBusy(false); } }
     })();
@@ -102,7 +109,7 @@ export function useSessionCharge() {
         if (!data) throw new Error('Could not confirm your session. Please retry.');
         if (version !== generation.current) throw new Error('This session has ended.');
         settled.current = true;
-        setReceipt(data.used_trial ? 'Your free session has been used. Retakes and downloads in this session are included.' : '100 points used. Retakes and downloads in this session are included.');
+        setReceipt(data.free ? FREE_RECEIPT : data.used_trial ? 'Your free session has been used. Retakes and downloads in this session are included.' : '100 points used. Retakes and downloads in this session are included.');
       } catch (e) {
         if (version === generation.current) setError(e instanceof Error ? e.message : 'Could not confirm your session. Please retry.');
         throw e;
@@ -111,7 +118,7 @@ export function useSessionCharge() {
     pending.current = task;
     return task;
   }
-  return { complete, reserve, reset, resume, adopt, forget, findActive, release, clearError, sessionId:id.current, busy, error, receipt, cost };
+  return { complete, reserve, reset, resume, adopt, forget, findActive, release, clearError, sessionId:id.current, busy, error, receipt, cost, free, freeUntil };
 }
 
 /** An unfinished booth reservation as reported by the server. */

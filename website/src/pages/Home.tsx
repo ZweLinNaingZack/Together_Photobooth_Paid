@@ -4,7 +4,8 @@ import { LegalLinks } from './LegalLinks';
 import { DecorativeIcon } from '../components/DecorativeIcon';
 import { HeroArt } from '../components/HeroArt';
 import { Icon, type IconName } from '../components/Icon';
-import { useT } from '../i18n';
+import { formatLongDate, useT } from '../i18n';
+import { useFreeMode } from '../auth/freeMode';
 import { Rich } from '../i18n/Rich';
 
 // The practice booth loads as its own small file, so the top of the home page shows up just as fast.
@@ -17,13 +18,16 @@ const STEPS: [1 | 2 | 3, IconName][] = [[1, 'send'], [2, 'camera'], [3, 'downloa
 
 export function Home() {
   const t = useT();
+  // Free promotion: a small badge above the button, and the "do I need to pay?" answer changes.
+  const { free, until } = useFreeMode();
+  const freeDate = until ? formatLongDate(until) : '';
   return <div id="home">
     <section className="hero" aria-labelledby="hero-title">
       <div className="hero-copy">
         <div className="eyebrow"><span className="tiny-star"><DecorativeIcon /></span> {t('home.eyebrow')}</div>
         <h1 id="hero-title"><Rich text={t('home.title1')} /><br /><Rich text={t('home.title2')} /><br /><span className="last-line"><Rich text={t('home.title3')} /><span className="title-star" aria-hidden="true"><DecorativeIcon /></span></span></h1>
         <p>{t('home.lead1')}<br className="desktop-break" /> {t('home.lead2')}</p>
-        <a className="primary" href="#booth">{t('common.takePhotos')}<Icon name="arrowRight" size={18} className="cta-arrow" /></a>
+        {free && <div className="free-badge"><Icon name="sparkles" size={14} />{t('free.badge', { date: freeDate })}</div>}<a className="primary" href="#booth">{t('common.takePhotos')}<Icon name="arrowRight" size={18} className="cta-arrow" /></a>
         <div className="hero-note"><Icon name="heart" size={16} /> {t('home.heroNote')}</div>
       </div>
       <HeroArt />
@@ -48,7 +52,7 @@ export function Home() {
     <section className="faq" id="faq" aria-labelledby="faq-title">
       <div className="faq-intro reveal"><div className="eyebrow">{t('home.faq.eyebrow')}</div><h2 id="faq-title"><Rich text={t('home.faq.title')} /></h2><p>{t('home.faq.lead')}</p></div>
       <div className="faq-list reveal">
-        {FAQ.map(n => <details key={n}><summary>{t(`home.faq.q${n}`)}<span className="faq-toggle" aria-hidden="true"><Icon name="plus" size={18} /></span></summary><div className="faq-answer"><p><Rich text={t(`home.faq.a${n}`)} /></p></div></details>)}
+        {FAQ.map(n => <details key={n}><summary>{t(`home.faq.q${n}`)}<span className="faq-toggle" aria-hidden="true"><Icon name="plus" size={18} /></span></summary><div className="faq-answer"><p><Rich text={free && n === 3 ? t('home.faq.a3.free', { date: freeDate }) : t(`home.faq.a${n}`)} /></p></div></details>)}
       </div>
     </section>
     <footer><a className="wordmark" href="#">together<span className="brand-dot"><DecorativeIcon /></span></a><span>{t('home.footer')}</span><LegalLinks /><span className="prototype-label">© 2026 TOGETHER</span></footer>
